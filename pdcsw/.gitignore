@@ -39,3 +39,26 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Tauri
+/src-tauri/target
+/src-tauri/Cargo.lock
+/src-tauri/gen
+/src-tauri/tauri.conf.json.bk
+/src-tauri/tauri.config.json.bk
+/src-tauri/tauri.linux.conf.json.bk
+/src-tauri/tauri.windows.conf.json.bk
+/src-tauri/tauri.macos.conf.json.bk
+/src-tauri/vendor
+/src-tauri/node_modules
+/src-tauri/bundle
+/src-tauri/debug
+/src-tauri/release
+/src-tauri/build
+/src-tauri/dist
+/src-tauri/api
+/src-tauri/app
+/src-tauri/bin
+/src-tauri/lib
+/src-tauri/src
+/src-tauri/icons

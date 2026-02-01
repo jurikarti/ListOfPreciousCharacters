@@ -1,84 +1,74 @@
 import { z } from "zod";
 
-// Характеристика (например, Телосложение)
-// Мы добавляем .default({}), чтобы если поле отсутствует, оно создавалось само
-const statSchema = z.object({
-    base: z.coerce.number().default(0),
-    bonus: z.coerce.number().default(0),
-    total: z.coerce.number().default(0),
-    image: z.string().optional().default(""), // Храним строку Base64
-    name: z.string().default(""),
-}).default({});
-
+// 1. Схема для валидации.
+// Она описывает только ФОРМУ данных, без значений по умолчанию.
+// Это гарантирует, что TypeScript выведет чистые и правильные типы.
 export const characterSchema = z.object({
-    // Шапка
-    name: z.string().default(""),
-    playerName: z.string().default(""),
-    mentor: z.string().default(""),
-    level: z.coerce.number().default(1),
-    exp: z.coerce.number().default(0),
-
-    // Внешность
-    age: z.string().default(""),
-    gender: z.string().default(""),
-    height: z.string().default(""),
-    hairColor: z.string().default(""),
-    eyeColor: z.string().default(""),
-    skinColor: z.string().default(""),
-
-    // Жизненный путь
-    origin: z.string().default(""),
-    secret: z.string().default(""),
-    future: z.string().default(""),
-
-    // Характеристики
-    // Каждое поле здесь использует statSchema с дефолтными значениями
+    image: z.string(),
+    name: z.string(),
+    playerName: z.string(),
+    mentor: z.string(),
+    level: z.coerce.number(),
+    exp: z.coerce.number(),
+    age: z.string(),
+    gender: z.string(),
+    height: z.string(),
+    hairColor: z.string(),
+    eyeColor: z.string(),
+    skinColor: z.string(),
+    origin: z.string(),
+    secret: z.string(),
+    future: z.string(),
     stats: z.object({
-        body: statSchema,      // Телосложение
-        intellect: statSchema, // Интеллект
-        mysticism: statSchema, // Мистицизм
-        agility: statSchema,   // Ловкость
-        senses: statSchema,    // Чувства
-        charisma: statSchema,  // Харизма
-    }).default({}), // <--- Важно: дефолт для всего объекта stats
-
-    // Вторичные
-    // Добавляем .default() для внутренних полей и для самого объекта
-    hp: z.object({
-        current: z.coerce.number().default(10),
-        max: z.coerce.number().default(10)
-    }).default({}),
-
-    mp: z.object({
-        current: z.coerce.number().default(10),
-        max: z.coerce.number().default(10)
-    }).default({}),
-
-    wp: z.object({
-        current: z.coerce.number().default(10),
-        max: z.coerce.number().default(10)
-    }).default({}),
-
-    // Боевые параметры
-    combat: z.object({
-        magicPower: z.coerce.number().default(0),
-        evasion: z.coerce.number().default(0),
-        defense: z.coerce.number().default(0),
-    }).default({}), // <--- Важно: дефолт для всего объекта combat
-
-    // Инвентарь
-    inventory: z.array(z.object({
-        slot: z.string(),
-        name: z.string(),
-        weight: z.coerce.number(),
-        effect: z.string(),
-    })).default([]),
-
-    // Заметки (HTML)
-    notes: z.string().default("<p>Заметки о персонаже...</p>"),
+        body: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+        intellect: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+        mysticism: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+        agility: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+        senses: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+        charisma: z.object({ base: z.coerce.number(), bonus: z.coerce.number(), total: z.coerce.number(), image: z.string().optional(), name: z.string() }),
+    }),
+    hp: z.object({ current: z.coerce.number(), max: z.coerce.number() }),
+    mp: z.object({ current: z.coerce.number(), max: z.coerce.number() }),
+    wp: z.object({ current: z.coerce.number(), max: z.coerce.number() }),
+    combat: z.object({ magicPower: z.coerce.number(), evasion: z.coerce.number(), defense: z.coerce.number() }),
+    inventory: z.array(z.object({ slot: z.string(), name: z.string(), weight: z.coerce.number(), effect: z.string() })),
+    notes: z.string(),
 });
 
+// 2. Выводим TypeScript тип из этой чистой схемы.
 export type CharacterData = z.infer<typeof characterSchema>;
 
-// Теперь parse({}) сработает корректно, так как все поля имеют дефолтные значения
-export const defaultCharacter: CharacterData = characterSchema.parse({});
+// 3. Определяем объект со значениями по умолчанию ОТДЕЛЬНО.
+// Это конкретный объект, который используется для инициализации формы.
+// TypeScript проверит, что его структура соответствует типу CharacterData.
+export const defaultCharacter: CharacterData = {
+    image: "",
+    name: "",
+    playerName: "",
+    mentor: "",
+    level: 1,
+    exp: 0,
+    age: "",
+    gender: "",
+    height: "",
+    hairColor: "",
+    eyeColor: "",
+    skinColor: "",
+    origin: "",
+    secret: "",
+    future: "",
+    stats: {
+        body: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+        intellect: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+        mysticism: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+        agility: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+        senses: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+        charisma: { base: 0, bonus: 0, total: 0, image: "", name: "" },
+    },
+    hp: { current: 10, max: 10 },
+    mp: { current: 10, max: 10 },
+    wp: { current: 10, max: 10 },
+    combat: { magicPower: 0, evasion: 0, defense: 0 },
+    inventory: [],
+    notes: "<p>Заметки о персонаже...</p>",
+};

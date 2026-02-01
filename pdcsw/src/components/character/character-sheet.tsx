@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { characterSchema, CharacterData, defaultCharacter } from "@/lib/schema";
+import { characterSchema, defaultCharacter, type CharacterData } from "@/lib/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -144,7 +144,7 @@ export default function CharacterSheet() {
                                 name="image"
                                 control={control}
                                 render={({ field }) => (
-                                    <ImageUpload value={field.value} onChange={field.onChange} />
+                                    <ImageUpload value={field.value || ""} onChange={field.onChange} />
                                 )}
                             />
                         </CardContent>
