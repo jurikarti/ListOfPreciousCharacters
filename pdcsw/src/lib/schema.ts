@@ -6,6 +6,8 @@ const statSchema = z.object({
     base: z.coerce.number().default(0),
     bonus: z.coerce.number().default(0),
     total: z.coerce.number().default(0),
+    image: z.string().optional().default(""), // Храним строку Base64
+    name: z.string().default(""),
 }).default({});
 
 export const characterSchema = z.object({

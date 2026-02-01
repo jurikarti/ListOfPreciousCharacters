@@ -2,6 +2,7 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 
 interface EditorProps {
     value: string;
@@ -12,7 +13,6 @@ export default function TiptapEditor({ value, onChange }: EditorProps) {
     const editor = useEditor({
         extensions: [StarterKit],
         content: value,
-        // Это исправляет ошибку SSR в Next.js
         immediatelyRender: false,
         onUpdate: ({ editor }) => {
             onChange(editor.getHTML());
@@ -23,6 +23,13 @@ export default function TiptapEditor({ value, onChange }: EditorProps) {
             }
         }
     });
+
+    // Синхронизация при внешнем изменении (импорт)
+    useEffect(() => {
+        if (editor && value !== editor.getHTML()) {
+            editor.commands.setContent(value);
+        }
+    }, [value, editor]);
 
     if (!editor) return null;
 
@@ -35,27 +42,14 @@ export default function TiptapEditor({ value, onChange }: EditorProps) {
                     type="button"
                     onClick={() => editor.chain().focus().toggleBold().run()}
                     className={editor.isActive('bold') ? 'bg-muted' : ''}
-                >
-                    <b>B</b>
-                </Button>
+                ><b>B</b></Button>
                 <Button
                     size="sm"
                     variant="ghost"
                     type="button"
                     onClick={() => editor.chain().focus().toggleItalic().run()}
                     className={editor.isActive('italic') ? 'bg-muted' : ''}
-                >
-                    <i>I</i>
-                </Button>
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                    className={editor.isActive('bulletList') ? 'bg-muted' : ''}
-                >
-                    List
-                </Button>
+                ><i>I</i></Button>
             </div>
             <EditorContent editor={editor} />
         </div>
