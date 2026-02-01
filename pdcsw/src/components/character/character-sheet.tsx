@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { characterSchema, defaultCharacter, type CharacterData } from "@/lib/schema";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DiceModal } from "./dice-modal";
 import TiptapEditor from "./tiptap-editor";
 import { ImageUpload } from "./image-upload";
-import { Download, Upload, Dice5, Save } from "lucide-react";
+import { Download, Upload, Dice5, Save, PlusCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
+
+const statKeys = ['body', 'intellect', 'mysticism', 'agility', 'passion', 'charisma'] as const;
+
+const statLabels: Record<typeof statKeys[number], string> = {
+    body: "Телосложение",
+    intellect: "Интеллект",
+    mysticism: "Мистицизм",
+    agility: "Ловкость",
+    passion: "Страсть / пыл",
+    charisma: "Харизма"
+};
+
+const combatStatLabels: Record<keyof Omit<CharacterData['combat'], 'baseDamage'>, string> = {
+    magicPower: "Магическая сила",
+    evasion: "Уклонение",
+    defense: "Защита",
+    enemyRecognition: "Распознавание врага",
+    evaluation: "Оценка",
+};
+
+const equipmentSlotLabels: Record<keyof CharacterData['equipment'], string> = {
+    rightHand: "Правая рука",
+    leftHand: "Левая рука",
+    head: "Голова",
+    body: "Тело",
+    extraDefense: "Доп. защита",
+    magic: "Магия",
+};
 
 export default function CharacterSheet() {
     const [diceState, setDiceState] = useState<{ open: boolean; notation: string; title: string }>({
@@ -30,7 +59,16 @@ export default function CharacterSheet() {
     const { register, control, watch, reset, getValues } = form;
     const values = watch();
 
-    // 1. Загрузка из LocalStorage при монтировании
+    const { fields: skills, append: appendSkill, remove: removeSkill } = useFieldArray({ control, name: "skills" });
+    const { fields: enchantments, append: appendEnchantment, remove: removeEnchantment } = useFieldArray({ control, name: "enchantments" });
+    const { fields: inventory } = useFieldArray({ control, name: "inventory" });
+
+    // Безопасный подсчет веса
+    const inventoryWeight = (values.inventory || []).reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
+    const equipmentWeight = Object.values(values.equipment || {}).reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
+    const currentWeight = inventoryWeight + equipmentWeight;
+
+    // Загрузка, сохранение, импорт/экспорт...
     useEffect(() => {
         if (typeof window !== "undefined") {
             const saved = localStorage.getItem("pd-character-data");
@@ -39,14 +77,11 @@ export default function CharacterSheet() {
                     const parsed = JSON.parse(saved);
                     reset(parsed);
                     toast.success("Данные успешно восстановлены");
-                } catch (e) {
-                    console.error("Ошибка загрузки автосохранения", e);
-                }
+                } catch (e) { console.error("Ошибка загрузки автосохранения", e); }
             }
         }
     }, [reset]);
 
-    // 2. Автосохранение при каждом изменении полей
     useEffect(() => {
         const subscription = watch((value) => {
             if (value) {
@@ -56,7 +91,6 @@ export default function CharacterSheet() {
         return () => subscription.unsubscribe();
     }, [watch]);
 
-    // 3. Экспорт персонажа в JSON файл
     const handleExport = () => {
         const data = getValues();
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -69,23 +103,14 @@ export default function CharacterSheet() {
         toast.success("Файл персонажа сохранен");
     };
 
-    // 4. Импорт персонажа из JSON файла
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
                 const json = JSON.parse(event.target?.result as string);
-
-                // Сбрасываем форму новыми данными
                 reset(json);
-
-                // Явно обновляем поля, которые могут не триггернуть UI
-                if (json.notes) form.setValue("notes", json.notes);
-                if (json.image) form.setValue("image", json.image);
-
                 toast.success("Персонаж и медиа-данные загружены");
             } catch (err) {
                 console.error("Import error:", err);
@@ -96,26 +121,38 @@ export default function CharacterSheet() {
         e.target.value = "";
     };
 
-    const rollDice = (diceAmount: number, statName: string) => {
-        const amount = diceAmount || 0;
-        if (amount < 1) {
-            toast.warning("Нет кубов для броска (значение 0)");
+    const rollDice = (notation: string, title: string) => {
+        if (!notation) {
+            toast.warning("Не указана формула для броска");
             return;
         }
-        setDiceState({
-            open: true,
-            notation: `${amount}d6`,
-            title: `Проверка: ${statName}`,
-        });
+        const finalNotation = notation.replace(/d\+/gi, 'd6+').replace(/d$/i, 'd6');
+        setDiceState({ open: true, notation: finalNotation, title: `Проверка: ${title}` });
     };
 
+    // Расчеты для таблицы характеристик
+    const calculatedStats = statKeys.reduce((acc, key) => {
+        const stat = values.stats?.[key];
+        const baseSum = (Number(stat?.race) || 0) + (Number(stat?.bonus) || 0);
+        const dividedBy3 = Math.floor(baseSum / 3);
+        const finalStat = dividedBy3 + (Number(stat?.style) || 0) + (Number(stat?.element) || 0) + (Number(stat?.other) || 0);
+        acc[key] = { baseSum, dividedBy3, finalStat };
+        return acc;
+    }, {} as Record<typeof statKeys[number], { baseSum: number; dividedBy3: number; finalStat: number }>);
+
+
     return (
-        <div className="container mx-auto p-2 md:p-6 space-y-6 max-w-6xl font-sans">
-            {/* Верхняя панель управления */}
+        <div className="container mx-auto p-2 md:p-6 space-y-4 max-w-screen-2xl font-sans">
+            {/* Верхняя панель */}
             <header className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm sticky top-2 z-20 backdrop-blur-md bg-opacity-90">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">P</div>
-                    <h1 className="text-xl font-bold tracking-tight hidden sm:block">Precious Days</h1>
+                    <div className="w-26 h-8 bg-primary rounded-lg flex items-center justify-center text-primary-foreground font-bold">by jurikarti</div>
+                    <h1 className="text-xl font-bold tracking-tight hidden sm:block">Драгоценные Дни</h1>
+                </div>
+                <div className="flex-grow grid grid-cols-1 sm:grid-cols-3 gap-4 mx-4">
+                    <Input placeholder="Имя персонажа" {...register("name")} />
+                    <Input placeholder="Имя игрока" {...register("playerName")} />
+                    <Input placeholder="Наставник / Мастер" {...register("mentor")} />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto justify-end">
                     <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file')?.click()}>
@@ -129,202 +166,227 @@ export default function CharacterSheet() {
                 </div>
             </header>
 
-            <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-
-                {/* Блок 1: Портрет, Основные данные и Внешность */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-
-                    {/* Портрет */}
-                    <Card className="md:col-span-3">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs uppercase text-muted-foreground font-bold">Портрет</CardTitle>
-                        </CardHeader>
+            <div className="grid grid-cols-12 gap-4">
+                {/* Левая колонка */}
+                <div className="col-span-12 lg:col-span-3 space-y-4">
+                    <Card>
+                        <CardHeader><CardTitle className="text-sm">Внешность</CardTitle></CardHeader>
                         <CardContent>
-                            <Controller
-                                name="image"
-                                control={control}
-                                render={({ field }) => (
-                                    <ImageUpload value={field.value || ""} onChange={field.onChange} />
-                                )}
-                            />
-                        </CardContent>
-                    </Card>
-
-                    {/* Данные персонажа */}
-                    <Card className="md:col-span-6">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs uppercase text-muted-foreground font-bold">Основная информация</CardTitle>
-                        </CardHeader>
-                        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <Label className="text-xs">Имя персонажа</Label>
-                                <Input {...register("name")} className="h-9" />
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-xs">Имя игрока</Label>
-                                <Input {...register("playerName")} className="h-9" />
-                            </div>
-                            <div className="sm:col-span-2 grid grid-cols-3 gap-2 pt-2">
-                                <div className="space-y-1">
-                                    <Label className="text-xs">GL (Уровень)</Label>
-                                    <Input type="number" {...register("level")} className="h-9 text-center" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Опыт</Label>
-                                    <Input type="number" {...register("exp")} className="h-9 text-center" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-xs">Наставник</Label>
-                                    <Input {...register("mentor")} className="h-9" />
-                                </div>
+                            <Controller name="image" control={control} render={({ field }) => <ImageUpload value={field.value} onChange={field.onChange} />} />
+                            <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                                <Input placeholder="Возраст" {...register("age")} />
+                                <Input placeholder="Пол" {...register("gender")} />
+                                <Input placeholder="Рост" {...register("height")} />
+                                <Input placeholder="Цвет волос" {...register("hairColor")} />
+                                <Input placeholder="Цвет глаз" {...register("eyeColor")} />
+                                <Input placeholder="Цвет кожи" {...register("skinColor")} />
                             </div>
                         </CardContent>
                     </Card>
-
-                    {/* Внешность */}
-                    <Card className="md:col-span-3">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-xs uppercase text-muted-foreground font-bold">Внешность</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="grid grid-cols-2 gap-2">
-                                <Input placeholder="Возраст" {...register("age")} className="h-8 text-xs" />
-                                <Input placeholder="Пол" {...register("gender")} className="h-8 text-xs" />
-                            </div>
-                            <Input placeholder="Рост" {...register("height")} className="h-8 text-xs" />
-                            <Input placeholder="Цвет глаз" {...register("eyeColor")} className="h-8 text-xs" />
-                            <Input placeholder="Волосы" {...register("hairColor")} className="h-8 text-xs" />
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Блок 2: Таблица Характеристик */}
-                <Card className="overflow-hidden border-2 border-primary/10">
-                    <CardHeader className="bg-muted/30 pb-3">
-                        <CardTitle className="text-sm font-bold">Характеристики и Проверки</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0 sm:p-6">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-center text-sm border-collapse min-w-[600px]">
-                                <thead>
-                                <tr className="border-b bg-muted/20">
-                                    <th className="text-left p-4 font-bold text-primary">Параметр</th>
-                                    <th className="p-2 text-muted-foreground">BODY (Тс)</th>
-                                    <th className="p-2 text-muted-foreground">INT (Инт)</th>
-                                    <th className="p-2 text-muted-foreground">MYS (Мис)</th>
-                                    <th className="p-2 text-muted-foreground">AGI (Лов)</th>
-                                    <th className="p-2 text-muted-foreground">SNS (Чув)</th>
-                                    <th className="p-2 text-muted-foreground">CHA (Хар)</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                <tr className="hover:bg-muted/10 transition-colors">
-                                    <td className="text-left font-semibold p-4 border-r">Значение</td>
-                                    {(['body', 'intellect', 'mysticism', 'agility', 'senses', 'charisma'] as const).map((stat) => (
-                                        <td key={stat} className="p-3">
-                                            <Input
-                                                type="number"
-                                                className="w-16 mx-auto text-center h-10 text-lg font-bold"
-                                                {...register(`stats.${stat}.base`)}
-                                            />
-                                        </td>
-                                    ))}
-                                </tr>
-                                <tr className="bg-primary/5">
-                                    <td className="text-left font-bold p-4 border-r text-primary">Бросок (D6)</td>
-                                    {(['body', 'intellect', 'mysticism', 'agility', 'senses', 'charisma'] as const).map((stat) => {
-                                        const statVal = values.stats?.[stat]?.base || 0;
-                                        return (
-                                            <td key={stat} className="p-3">
-                                                <Button
-                                                    type="button"
-                                                    variant="default"
-                                                    size="sm"
-                                                    className="w-full h-10 shadow-sm hover:scale-105 transition-transform"
-                                                    onClick={() => rollDice(statVal, stat.toUpperCase())}
-                                                >
-                                                    <Dice5 className="w-4 h-4 mr-2" />
-                                                    {statVal}D
-                                                </Button>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Блок 3: Состояние и Заметки */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-
-                    {/* Жизненные показатели */}
-                    <Card className="md:col-span-4 h-fit border-t-4 border-t-primary">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-bold">Состояние</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-5">
-                            {(['hp', 'mp', 'wp'] as const).map((stat) => (
-                                <div key={stat} className="space-y-1">
-                                    <div className="flex justify-between text-xs font-black uppercase mb-1">
-                                        <span>{stat}</span>
-                                        <span className="text-muted-foreground">Текущее / Максимум</span>
+                    <Card>
+                        <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            {(['hp', 'mp', 'wp'] as const).map((pool) => (
+                                <div key={pool} className="space-y-2">
+                                    <div className="flex justify-between text-xs font-bold uppercase">
+                                        <span>{pool}</span>
+                                        <span>{values[pool]?.current} / {values[pool]?.max}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <Input className="text-center font-bold text-lg h-11" placeholder="Cur" type="number" {...register(`${stat}.current` as any)} />
-                                        <span className="text-xl font-light text-muted-foreground">/</span>
-                                        <Input className="text-center bg-muted/30 h-11" placeholder="Max" type="number" {...register(`${stat}.max` as any)} />
+                                    <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} />
+                                    <div className="flex gap-2">
+                                        <Input type="number" placeholder="Тек." {...register(`${pool}.current`)} className="h-8" />
+                                        <Input type="number" placeholder="Макс." {...register(`${pool}.max`)} className="h-8" />
                                     </div>
                                 </div>
                             ))}
+                        </CardContent>
+                    </Card>
+                </div>
 
-                            <div className="pt-4 border-t space-y-3">
-                                <div className="flex justify-between items-center bg-muted/20 p-2 rounded-md">
-                                    <Label className="text-xs font-bold uppercase">Маг. Сила</Label>
-                                    <Input className="w-16 h-8 text-center font-bold" type="number" {...register("combat.magicPower")} />
+                {/* Центральная колонка */}
+                <div className="col-span-12 lg:col-span-9 space-y-4">
+                    <Card>
+                        <CardContent className="p-4 grid grid-cols-3 gap-4">
+                            <div className="col-span-2 grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label className="text-xs">Жизненный путь</Label>
+                                    <div className="grid grid-cols-1 gap-2 mt-1">
+                                        <Input placeholder="Происхождение" {...register("origin")} />
+                                        <Input placeholder="Секрет" {...register("secret")} />
+                                        <Input placeholder="Будущее" {...register("future")} />
+                                        <Input placeholder="Фокусирующий предмет" {...register("focusItem")} />
+                                    </div>
                                 </div>
-                                <div className="flex justify-between items-center bg-muted/20 p-2 rounded-md">
-                                    <Label className="text-xs font-bold uppercase">Уклонение</Label>
-                                    <Input className="w-16 h-8 text-center font-bold" type="number" {...register("combat.evasion")} />
+                                <div>
+                                    <Label className="text-xs">Боевые параметры</Label>
+                                    <div className="space-y-2 mt-1">
+                                        {(['magicPower', 'evasion', 'defense'] as const).map(key => {
+                                            const combatStat = values.combat?.[key];
+                                            const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                            return (
+                                                <div key={key} className="text-xs">
+                                                    <Label>{combatStatLabels[key]}</Label>
+                                                    <div className="flex items-center gap-1">
+                                                        <Input {...register(`combat.${key}.check`)} className="h-8" />
+                                                        <Input {...register(`combat.${key}.modifier`)} className="h-8 w-20" />
+                                                        <Input value={total} readOnly className="h-8 flex-grow bg-muted" />
+                                                        <Button type="button" size="icon" className="h-8 w-8" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                                <div className="flex justify-between items-center bg-muted/20 p-2 rounded-md">
-                                    <Label className="text-xs font-bold uppercase">Защита</Label>
-                                    <Input className="w-16 h-8 text-center font-bold" type="number" {...register("combat.defense")} />
+                            </div>
+                            <div className="flex flex-col items-center justify-center gap-4">
+                                <div className="flex items-end gap-4">
+                                    <div className="space-y-1 text-center">
+                                        <Label>GL</Label>
+                                        <Input type="number" {...register("level")} className="w-20 h-20 text-4xl text-center font-bold" />
+                                    </div>
+                                    <div className="space-y-1 text-center">
+                                        <Label>Опыт</Label>
+                                        <Input type="number" {...register("exp")} className="w-24 h-10 text-center" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2 w-full">
+                                    <Label className="text-xs">Особые проверки</Label>
+                                    {(['enemyRecognition', 'evaluation'] as const).map(key => {
+                                        const combatStat = values.combat?.[key];
+                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                        return (
+                                            <div key={key} className="text-xs">
+                                                <Label>{combatStatLabels[key]}</Label>
+                                                <div className="flex items-center gap-1">
+                                                    <Input {...register(`combat.${key}.check`)} className="h-8" />
+                                                    <Input {...register(`combat.${key}.modifier`)} className="h-8 w-20" />
+                                                    <Input value={total} readOnly className="h-8 flex-grow bg-muted" />
+                                                    <Button type="button" size="icon" className="h-8 w-8" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Текстовый редактор для заметок */}
-                    <Card className="md:col-span-8 flex flex-col min-h-[500px]">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-bold uppercase">Заметки, Способности и Снаряжение</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex-grow flex flex-col">
-                            <Controller
-                                name="notes"
-                                control={control}
-                                render={({ field }) => (
-                                    <TiptapEditor value={field.value} onChange={field.onChange} />
-                                )}
-                            />
+                    <Card>
+                        <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            <table className="w-full text-xs border-collapse">
+                                <thead>
+                                    <tr className="bg-muted/50">
+                                        <th className="p-2 text-left border">Параметр / Атрибут</th>
+                                        {statKeys.map(key => <th key={key} className="p-2 border">{statLabels[key]}</th>)}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td className="p-1 border"><Input {...register("raceName")} placeholder="Раса" className="h-8" /></td>
+                                        {statKeys.map(key => <td key={key} className="p-1 border"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center" /></td>)}
+                                    </tr>
+                                    <tr>
+                                        <td className="p-1 border"><Label>Бонус (5 очков)</Label></td>
+                                        {statKeys.map(key => <td key={key} className="p-1 border"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center" /></td>)}
+                                    </tr>
+                                    <tr className="bg-muted/30">
+                                        <td className="p-2 border font-bold">Сумма базовых значений</td>
+                                        {statKeys.map(key => <td key={key} className="p-2 border text-center font-bold">{calculatedStats[key]?.baseSum}</td>)}
+                                    </tr>
+                                    <tr className="bg-muted/30">
+                                        <td className="p-2 border font-bold">(Базовое значение ÷ 3)</td>
+                                        {statKeys.map(key => <td key={key} className="p-2 border text-center font-bold">{calculatedStats[key]?.dividedBy3}</td>)}
+                                    </tr>
+                                    <tr>
+                                        <td className="p-1 border"><Input {...register("styleName")} placeholder="Стиль" className="h-8" /></td>
+                                        {statKeys.map(key => <td key={key} className="p-1 border"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center" /></td>)}
+                                    </tr>
+                                    <tr>
+                                        <td className="p-1 border"><Input {...register("elementName")} placeholder="Стихия" className="h-8" /></td>
+                                        {statKeys.map(key => <td key={key} className="p-1 border"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center" /></td>)}
+                                    </tr>
+                                    <tr className="bg-primary/10">
+                                        <td className="p-2 border font-bold text-primary">Характеристики</td>
+                                        {statKeys.map(key => <td key={key} className="p-2 border text-center font-bold text-lg text-primary">{calculatedStats[key]?.finalStat}</td>)}
+                                    </tr>
+                                    <tr>
+                                        <td className="p-1 border"><Label>Другие корректировки</Label></td>
+                                        {statKeys.map(key => <td key={key} className="p-1 border"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center" /></td>)}
+                                    </tr>
+                                    <tr className="bg-primary/20">
+                                        <td className="p-2 border font-bold">Количество костей (Дайсы)</td>
+                                        {statKeys.map(key => (
+                                            <td key={key} className="p-2 border text-center font-bold">
+                                                <Button type="button" variant="ghost" className="w-full" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>
+                                                    {calculatedStats[key]?.finalStat} (2D)
+                                                </Button>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                </tbody>
+                            </table>
                         </CardContent>
                     </Card>
                 </div>
-            </form>
+            </div>
 
-            {/* Всплывающее окно броска кубиков */}
-            <DiceModal
-                isOpen={diceState.open}
-                onClose={() => setDiceState(prev => ({ ...prev, open: false }))}
-                notation={diceState.notation}
-                title={diceState.title}
-            />
+            {/* Нижняя панель - Экипировка и Инвентарь */}
+            <Card>
+                <CardHeader><CardTitle className="text-sm">Экипировка и Инвентарь</CardTitle></CardHeader>
+                <CardContent>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr>
+                                    <th className="text-left">Слот/Предмет</th>
+                                    <th className="w-16">Вес</th>
+                                    <th className="w-16">Попад.</th>
+                                    <th className="w-24">Урон</th>
+                                    <th className="w-16">Дальн.</th>
+                                    <th className="w-16">Уклон.</th>
+                                    <th className="w-16">Защита</th>
+                                    <th className="text-left">Примечание</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(Object.keys(equipmentSlotLabels) as Array<keyof typeof equipmentSlotLabels>).map((slot) => (
+                                    <tr key={slot}>
+                                        <td><Input {...register(`equipment.${slot}.name`)} placeholder={equipmentSlotLabels[slot]} className="h-8" /></td>
+                                        <td><Input type="number" {...register(`equipment.${slot}.weight`)} className="h-8" /></td>
+                                        <td><Input type="number" {...register(`equipment.${slot}.hit`)} className="h-8" /></td>
+                                        <td className="flex items-center gap-1">
+                                            <Input {...register(`equipment.${slot}.damage`)} className="h-8" />
+                                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button>
+                                        </td>
+                                        <td><Input type="number" {...register(`equipment.${slot}.range`)} className="h-8" /></td>
+                                        <td><Input type="number" {...register(`equipment.${slot}.evasion`)} className="h-8" /></td>
+                                        <td><Input type="number" {...register(`equipment.${slot}.defense`)} className="h-8" /></td>
+                                        <td><Input {...register(`equipment.${slot}.notes`)} className="h-8" /></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="mt-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <Label>Снаряжение (в рюкзаке)</Label>
+                            <div className="text-sm">Вес: {currentWeight.toFixed(1)} / {values.maxWeight}</div>
+                        </div>
+                        {inventory.map((item, index) => (
+                            <div key={item.id} className="flex gap-2 items-center mb-1">
+                                <Input {...register(`inventory.${index}.name`)} placeholder={`Предмет ${index + 1}`} className="h-8 flex-grow" />
+                                <div className="flex items-center gap-1">
+                                    <Label className="text-xs">Вес:</Label>
+                                    <Input type="number" {...register(`inventory.${index}.weight`)} className="h-8 w-20" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
 
-            <footer className="text-center text-[10px] text-muted-foreground pt-8 pb-4">
-                Precious Days Character Sheet Web v1.0 • JSON-based • Next.js + Shadcn
-            </footer>
+            <DiceModal isOpen={diceState.open} onClose={() => setDiceState(prev => ({ ...prev, open: false }))} notation={diceState.notation} title={diceState.title} />
         </div>
     );
 }
