@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LoPC (List of Precious Characters)
 
-## Getting Started
+Interactive character sheet for TTRPG "Precious Days", built with Next.js and Tauri.
 
-First, run the development server:
+## Interface Overview
+
+The application features a responsive layout designed for both Desktop and Mobile use:
+
+- **Desktop**: A comprehensive 12-column grid displaying all character sections simultaneously.
+- **Mobile**: A tabbed navigation system with smooth sliding transitions and swipe gestures:
+  - **General (Инфо)**: Character info (Name, Age, Gender), Player & Master details, Avatar upload, and Vital Path/Appearance info.
+  - **Combat (Бой)**: Resource pools (HP, MP, WP), GL (Level) indicators, Experience bar, and Combat Parameters.
+  - **Stats (Хар-ки)**: Interactive Characteristics table with automated base-stat calculations.
+  - **Inventory (Вещи)**: Detailed Equipment table and a dynamic Backpack list with weight tracking.
+
+## Key Features
+
+- **Animated Navigation**: Swipe-to-change tabs on mobile using `framer-motion`.
+- **Integrated Dice Roller**: Execute 2d6+mod checks directly from stats and equipment fields.
+- **Dynamic Character Data**: Auto-save to LocalStorage and functionality to Import/Export character JSON files.
+- **Secure Reset**: A secure "Reset Sheet" feature with an iOS-style slider confirmation.
+- **Theming**: Full support for Light and Dark modes.
+
+## Development
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (latest LTS)
+- [Rust](https://www.rust-lang.org/) (required for Tauri desktop builds)
+
+### Run Web Version
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Open [http://localhost:3000](http://localhost:3000)
+
+### Run Desktop Version
+
+```bash
+npm run tauri dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Build
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Web Build
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Desktop Bundle
+```bash
+npm run tauri build
+```
+Generates installers in `src-tauri/target/release/bundle`.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+# LoPC (List of Precious Characters)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Интерактивный лист персонажа для НРИ «Драгоценные дни», построенный на Next.js и Tauri.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Обзор интерфейса
 
-## Deploy on Vercel
+Приложение имеет адаптивный дизайн, оптимизированный для ПК и мобильных устройств:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **ПК**: Полноценная сетка из 12 колонок, отображающая все разделы персонажа одновременно.
+- **Мобильные устройства**: Система вкладок с плавной анимацией перелистывания и поддержкой жестов (свайпов):
+  - **Инфо (General)**: Информация о персонаже (имя, возраст, пол), данные игрока и мастера, загрузка аватара, а также сведения о внешности и жизненном пути.
+  - **Бой (Combat)**: Индикаторы ресурсов (ОЗ, ОМ, ОВ), уровень (GL), полоска опыта и боевые параметры.
+  - **Хар-ки (Stats)**: Интерактивная таблица характеристик с автоматическим расчетом базовых значений.
+  - **Вещи (Inventory)**: Детальная таблица экипировки и динамический список предметов в рюкзаке с отслеживанием веса.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Ключевые особенности
+
+- **Анимированная навигация**: Переключение вкладок с помощью свайпов на мобильных устройствах (используется `framer-motion`).
+- **Встроенная система бросков**: Выполнение проверок 2d6+мод напрямую из полей характеристик и экипировки.
+- **Динамические данные**: Автоматическое сохранение в LocalStorage и возможность импорта/экспорта персонажа в формате JSON.
+- **Безопасный сброс**: Функция защищенной очистки листа с подтверждением через iOS-слайдер.
+- **Темы**: Полная поддержка светлой и темной тем.
+
+## Разработка
+
+### Предварительные требования
+
+- [Node.js](https://nodejs.org/) (последняя LTS версия)
+- [Rust](https://www.rust-lang.org/) (необходим для сборки десктопной версии через Tauri)
+
+### Запуск веб-версии
+
+```bash
+npm install
+npm run dev
+```
+Откройте [http://localhost:3000](http://localhost:3000)
+
+### Запуск десктопной версии
+
+```bash
+npm run tauri dev
+```
+
+## Сборка
+
+### Веб-версия
+```bash
+npm run build
+```
+
+### Десктопное приложение
+```bash
+npm run tauri build
+```
+Инсталляторы будут созданы в папке `src-tauri/target/release/bundle`.
