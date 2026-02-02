@@ -34,6 +34,7 @@ export const characterSchema = z.object({
     name: z.string(),
     playerName: z.string(),
     mentor: z.string(),
+    masterName: z.string(),
     level: z.coerce.number().min(1).max(10),
     exp: z.coerce.number(),
 
@@ -119,19 +120,33 @@ export const characterSchema = z.object({
 
     // Заметки
     notes: z.string(),
+
+    // Лист Воспоминаний (Memories Sheet)
+    memories: z.array(z.object({
+        date: z.string(),
+        content: z.string(),
+        ascension: z.boolean(),
+        reward: z.string(),
+    })),
+    growthTable: z.array(z.object({
+        exp: z.string(),
+        content: z.string(),
+    })),
+    experiencePoints: z.string(),
 });
 
 // 2. Выводим TypeScript тип из схемы.
-export type CharacterData = z.infer<typeof characterSchema>;
+export type CharacterSheetData = z.infer<typeof characterSchema>;
 
 const defaultStat = { race: 0, bonus: 0, style: 0, element: 0, other: 0 };
 
 // 3. Определяем объект со значениями по умолчанию.
-export const defaultCharacter: CharacterData = {
+export const defaultCharacter: CharacterSheetData = {
     image: "",
     name: "",
     playerName: "",
     mentor: "",
+    masterName: "",
     level: 1,
     exp: 0,
     origin: "",
@@ -182,4 +197,14 @@ export const defaultCharacter: CharacterData = {
     maxWeight: 30,
     connections: [],
     notes: "<p>Заметки о персонаже...</p>",
+    memories: Array(15).fill({ date: "", content: "", ascension: false, reward: "" }),
+    growthTable: [
+        { exp: "1000", content: "Получить один навык" },
+        { exp: "3000", content: "Повысить HP и MP." },
+        { exp: "5000", content: "Получить один предмет и один расходник." },
+        { exp: "6000", content: "Получить один навык и один расходник." },
+        { exp: "8000", content: "Получить один навык." },
+        { exp: "10000", content: "Повышение ранга" },
+    ],
+    experiencePoints: "",
 };
