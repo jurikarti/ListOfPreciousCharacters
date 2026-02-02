@@ -35,7 +35,7 @@ export const characterSchema = z.object({
     playerName: z.string(),
     mentor: z.string(),
     masterName: z.string(),
-    level: z.coerce.number().min(1).max(10),
+    level: z.coerce.number().min(0).max(6),
     exp: z.coerce.number(),
 
     // Жизненный путь
@@ -65,6 +65,12 @@ export const characterSchema = z.object({
         agility: mainStatSchema,
         passion: mainStatSchema,
         charisma: mainStatSchema,
+    }).refine((stats) => {
+        const totalBonus = Object.values(stats).reduce((acc, stat) => acc + (stat.bonus || 0), 0);
+        return totalBonus <= 5;
+    }, {
+        message: "Сумма бонусов не может превышать 5 очков",
+        path: ["root"], // This might need adjustment depending on where we want the error to appear, or generic enough
     }),
 
     // Ресурсы
@@ -84,9 +90,12 @@ export const characterSchema = z.object({
 
     // Навыки
     skills: z.array(z.object({
+        id: z.string(),
         name: z.string(),
-        value: z.coerce.number(),
+        cost: z.string(),
         effect: z.string(),
+        timing: z.string().optional(),
+        classification: z.string().optional(),
     })),
 
     // Экипировка по слотам
@@ -147,7 +156,7 @@ export const defaultCharacter: CharacterSheetData = {
     playerName: "",
     mentor: "",
     masterName: "",
-    level: 1,
+    level: 0,
     exp: 0,
     origin: "",
     secret: "",
@@ -182,7 +191,7 @@ export const defaultCharacter: CharacterSheetData = {
         evaluation: { check: "2d6", modifier: "+0" },
     },
     skills: [
-        { name: "Приток маны", value: 0, effect: "Позволяет использовать магию." }
+        { id: "mana_inflow", name: "Mana Inflow (Приток маны)", cost: "0 MP", effect: "Позволяет использовать магию. Можно выполнять магические проверки.", classification: "Магия", timing: "Пассив" }
     ],
     equipment: {
         rightHand: { name: "", weight: 0, hit: 0, damage: "", range: 0, evasion: 0, defense: 0, notes: "" },

@@ -14,15 +14,22 @@ import TiptapEditor from "./tiptap-editor";
 import { ImageUpload } from "./image-upload";
 import { ResetModal } from "./reset-modal";
 import { MemoriesSheet } from "./memories-sheet";
+import { SkillsManager } from "./skills-manager";
 import { CreditsModal } from "./credits-modal";
-import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList } from "lucide-react";
+import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen } from "lucide-react";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-const tabs = ["general", "combat", "stats", "inventory"] as const;
+const tabs = ["general", "combat", "skills", "stats", "inventory"] as const;
 type TabType = typeof tabs[number];
 
 const slideVariants = {
@@ -66,6 +73,31 @@ const equipmentSlotLabels: Record<keyof CharacterSheetData['equipment'], string>
     extraDefense: "Доп. защита",
     magic: "Магия",
 };
+
+const RACES = {
+    "Человек": { body: 8, intellect: 7, mysticism: 7, agility: 8, passion: 10, charisma: 10 },
+    "Эльф": { body: 7, intellect: 12, mysticism: 7, agility: 8, passion: 8, charisma: 8 },
+    "Ангел": { body: 8, intellect: 10, mysticism: 10, agility: 8, passion: 7, charisma: 7 },
+    "Зверочеловек": { body: 8, intellect: 7, mysticism: 8, agility: 12, passion: 7, charisma: 8 },
+} as const;
+
+const STYLES = {
+    "Энчантер": { stats: { body: 1, intellect: 0, mysticism: 1, agility: 0, passion: 1, charisma: 0 }, hp: 30, mp: 15 },
+    "Кастер": { stats: { body: 0, intellect: 1, mysticism: 0, agility: 0, passion: 1, charisma: 1 }, hp: 28, mp: 17 },
+    "Шутер": { stats: { body: 0, intellect: 1, mysticism: 0, agility: 1, passion: 0, charisma: 1 }, hp: 27, mp: 18 },
+    "Шейпшифтер": { stats: { body: 1, intellect: 0, mysticism: 1, agility: 1, passion: 0, charisma: 0 }, hp: 30, mp: 15 },
+    "Сейкрифер": { stats: { body: 0, intellect: 1, mysticism: 1, agility: 0, passion: 1, charisma: 0 }, hp: 28, mp: 17 },
+    "Мистик": { stats: { body: 1, intellect: 0, mysticism: 1, agility: 0, passion: 1, charisma: 0 }, hp: 29, mp: 16 },
+} as const;
+
+const ELEMENTS = {
+    "Земля": { body: 1, intellect: 0, mysticism: 0, agility: 0, passion: 0, charisma: 0 },
+    "Вода": { body: 0, intellect: 0, mysticism: 1, agility: 0, passion: 0, charisma: 0 },
+    "Огонь": { body: 0, intellect: 1, mysticism: 0, agility: 0, passion: 0, charisma: 0 },
+    "Ветер": { body: 0, intellect: 0, mysticism: 0, agility: 1, passion: 0, charisma: 0 },
+    "Свет": { body: 0, intellect: 0, mysticism: 0, agility: 0, passion: 0, charisma: 1 },
+    "Тьма": { body: 0, intellect: 0, mysticism: 0, agility: 0, passion: 1, charisma: 0 },
+} as const;
 
 export default function CharacterSheet() {
     const [diceState, setDiceState] = useState<{ open: boolean; notation: string; title: string }>({
@@ -380,19 +412,40 @@ export default function CharacterSheet() {
                                                     <div className="absolute inset-0 transform -rotate-90">
                                                         <svg className="w-full h-full" viewBox="0 0 100 100">
                                                             <circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" />
-                                                            <circle className="text-primary stroke-current transition-all duration-500 ease-out" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 10) * 263.89 }} />
+                                                            <circle className="text-primary stroke-current transition-all duration-500 ease-out" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 6) * 263.89 }} />
                                                         </svg>
                                                     </div>
                                                     <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
                                                 </div>
                                                 <div className="flex flex-col justify-center gap-1 -ml-2">
-                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current < 10) setValue("level", current + 1); }} disabled={(values.level || 0) >= 10}><Plus className="h-3 w-3" /></Button>
-                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current > 1) setValue("level", current - 1); }} disabled={(values.level || 0) <= 1}><Minus className="h-3 w-3" /></Button>
+                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
+                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
                                                 </div>
                                                 <div className="flex-grow flex flex-col justify-center gap-1.5">
-                                                    <div className="flex justify-between items-baseline px-1"><Label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Опыт (XP)</Label><span className="text-[10px] text-muted-foreground">Total</span></div>
+                                                    <div className="flex justify-between items-baseline px-1">
+                                                        <Label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Опыт (XP)</Label>
+                                                        {(values.exp || 0) >= 10000 && (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="default" // Use primary color to stand out
+                                                                className="h-6 text-[10px] px-2 animate-pulse bg-green-600 hover:bg-green-700 text-white shadow-[0_0_10px_rgba(22,163,74,0.5)]"
+                                                                onClick={() => {
+                                                                    const currentLevel = values.level || 0;
+                                                                    if (currentLevel < 6) {
+                                                                        setValue("level", currentLevel + 1);
+                                                                        setValue("exp", 0);
+                                                                        toast.success(`Уровень повышен! GL: ${currentLevel + 1}`);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <ArrowUpCircle className="w-3 h-3 mr-1" />
+                                                                Level Up
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                     <div className="relative"><Input type="number" {...register("exp")} className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20" /><div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50"><div className="w-1.5 h-1.5 rounded-full bg-primary" /></div></div>
-                                                    <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: '100%' }} /></div>
+                                                    <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: `${Math.min(((values.exp || 0) / 10000) * 100, 100)}%` }} /></div>
                                                 </div>
                                             </div>
                                             <div className="space-y-3">
@@ -424,12 +477,122 @@ export default function CharacterSheet() {
                                             <table className="w-full text-sm min-w-[600px]">
                                                 <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground border-r w-[200px]">Параметр / Атрибут</th>{statKeys.map(key => (<th key={key} className="h-10 px-4 text-center align-middle font-medium text-muted-foreground border-r last:border-r-0">{statLabels[key]}</th>))}</tr></thead>
                                                 <tbody className="[&_tr:last-child]:border-0">
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r"><Input {...register("raceName")} placeholder="Раса" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Бонус (5 очков)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
+                                                    <tr className="border-b">
+                                                        <td className="p-2 align-middle border-r">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                        {values.raceName || "Выбрать расу"}
+                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="w-[180px]">
+                                                                    {Object.keys(RACES).map((race) => (
+                                                                        <DropdownMenuItem
+                                                                            key={race}
+                                                                            onClick={() => {
+                                                                                setValue("raceName", race);
+                                                                                const stats = RACES[race as keyof typeof RACES];
+                                                                                setValue("stats.body.race", stats.body);
+                                                                                setValue("stats.intellect.race", stats.intellect);
+                                                                                setValue("stats.mysticism.race", stats.mysticism);
+                                                                                setValue("stats.agility.race", stats.agility);
+                                                                                setValue("stats.passion.race", stats.passion);
+                                                                                setValue("stats.charisma.race", stats.charisma);
+                                                                            }}
+                                                                        >
+                                                                            {race}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </td>
+                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                    </tr>
+                                                    <tr className="border-b">
+                                                        <td className={`p-2 align-middle border-r font-medium text-xs ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : "text-muted-foreground"}`}>
+                                                            Бонус ({Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0)}/5 очков)
+                                                        </td>
+                                                        {statKeys.map(key => (
+                                                            <td key={key} className="p-2 align-middle border-r last:border-r-0">
+                                                                <Input
+                                                                    type="number"
+                                                                    {...register(`stats.${key}.bonus`)}
+                                                                    className={`h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : ""}`}
+                                                                />
+                                                            </td>
+                                                        ))}
+                                                    </tr>
                                                     <tr className="border-b"><td className="p-2 align-middle border-r font-semibold text-xs">Сумма базовых значений</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
                                                     <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 align-middle border-r font-semibold text-xs text-foreground">(Базовое значение ÷ 3)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r"><Input {...register("styleName")} placeholder="Стиль" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r"><Input {...register("elementName")} placeholder="Стихия" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
+                                                    <tr className="border-b">
+                                                        <td className="p-2 align-middle border-r">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                        {values.styleName || "Выбрать стиль"}
+                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="w-[180px]">
+                                                                    {Object.keys(STYLES).map((style) => (
+                                                                        <DropdownMenuItem
+                                                                            key={style}
+                                                                            onClick={() => {
+                                                                                setValue("styleName", style);
+                                                                                const data = STYLES[style as keyof typeof STYLES];
+                                                                                setValue("stats.body.style", data.stats.body);
+                                                                                setValue("stats.intellect.style", data.stats.intellect);
+                                                                                setValue("stats.mysticism.style", data.stats.mysticism);
+                                                                                setValue("stats.agility.style", data.stats.agility);
+                                                                                setValue("stats.passion.style", data.stats.passion);
+                                                                                setValue("stats.charisma.style", data.stats.charisma);
+                                                                                // Update Max HP/MP
+                                                                                setValue("hp.max", data.hp);
+                                                                                setValue("mp.max", data.mp);
+                                                                                toast.success(`Стиль ${style} выбран! HP/MP обновлены.`);
+                                                                            }}
+                                                                        >
+                                                                            {style}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </td>
+                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                    </tr>
+                                                    <tr className="border-b">
+                                                        <td className="p-2 align-middle border-r">
+                                                            <DropdownMenu>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                        {values.elementName || "Выбрать стихию"}
+                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                    </Button>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuContent align="start" className="w-[180px]">
+                                                                    {Object.keys(ELEMENTS).map((element) => (
+                                                                        <DropdownMenuItem
+                                                                            key={element}
+                                                                            onClick={() => {
+                                                                                setValue("elementName", element);
+                                                                                const stats = ELEMENTS[element as keyof typeof ELEMENTS];
+                                                                                setValue("stats.body.element", stats.body);
+                                                                                setValue("stats.intellect.element", stats.intellect);
+                                                                                setValue("stats.mysticism.element", stats.mysticism);
+                                                                                setValue("stats.agility.element", stats.agility);
+                                                                                setValue("stats.passion.element", stats.passion);
+                                                                                setValue("stats.charisma.element", stats.charisma);
+                                                                            }}
+                                                                        >
+                                                                            {element}
+                                                                        </DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuContent>
+                                                            </DropdownMenu>
+                                                        </td>
+                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                    </tr>
                                                     <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-3 align-middle border-r font-bold text-primary">ХАРАКТЕРИСТИКИ</td>{statKeys.map(key => (<td key={key} className="p-3 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.finalStat || 0} className="h-9 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-bold text-xl p-0" /></td>))}</tr>
                                                     <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Другие корректировки</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
                                                     <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
@@ -437,6 +600,16 @@ export default function CharacterSheet() {
                                             </table>
                                         </div>
                                     </CardContent>
+                                </Card>
+
+                                {/* --- SKILLS --- */}
+                                <Card className="p-4 relative overflow-hidden">
+                                    <SkillsManager
+                                        form={form}
+                                        level={values.level || 0}
+                                        raceName={values.raceName}
+                                        styleName={values.styleName}
+                                    />
                                 </Card>
 
                                 {/* Equipment & Inventory */}
@@ -587,14 +760,35 @@ export default function CharacterSheet() {
                                                             <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
                                                         </div>
                                                         <div className="flex flex-col justify-center gap-2">
-                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current < 10) setValue("level", current + 1); }} disabled={(values.level || 0) >= 10}><Plus className="h-3 w-3" /></Button>
-                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current > 1) setValue("level", current - 1); }} disabled={(values.level || 0) <= 1}><Minus className="h-3 w-3" /></Button>
+                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
+                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
                                                         </div>
                                                     </div>
                                                     <div className="space-y-2 px-2">
-                                                        <div className="flex justify-between items-baseline"><Label className="text-[10px] font-bold uppercase text-muted-foreground">Опыт (XP)</Label></div>
+                                                        <div className="flex justify-between items-baseline">
+                                                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Опыт (XP)</Label>
+                                                            {(values.exp || 0) >= 10000 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="default"
+                                                                    className="h-6 text-[10px] px-2 animate-pulse bg-green-600 hover:bg-green-700 text-white shadow-[0_0_10px_rgba(22,163,74,0.5)]"
+                                                                    onClick={() => {
+                                                                        const currentLevel = values.level || 0;
+                                                                        if (currentLevel < 6) {
+                                                                            setValue("level", currentLevel + 1);
+                                                                            setValue("exp", 0);
+                                                                            toast.success(`Уровень повышен! GL: ${currentLevel + 1}`);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <ArrowUpCircle className="w-3 h-3 mr-1" />
+                                                                    Level Up
+                                                                </Button>
+                                                            )}
+                                                        </div>
                                                         <div className="relative"><Input type="number" {...register("exp")} className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20" /><div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50"><div className="w-1.5 h-1.5 rounded-full bg-primary" /></div></div>
-                                                        <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: '100%' }} /></div>
+                                                        <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: `${Math.min(((values.exp || 0) / 10000) * 100, 100)}%` }} /></div>
                                                     </div>
                                                     <div className="space-y-4">
                                                         <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
@@ -625,6 +819,21 @@ export default function CharacterSheet() {
                                                 </CardContent>
                                             </Card>
                                         </>
+                                    )}
+
+                                    {activeTab === "skills" && (
+                                        <Card>
+                                            <CardHeader><CardTitle className="text-sm">Навыки</CardTitle></CardHeader>
+                                            <CardContent>
+                                                <SkillsManager
+                                                    form={form}
+                                                    isMobile={true}
+                                                    level={values.level || 0}
+                                                    raceName={values.raceName}
+                                                    styleName={values.styleName}
+                                                />
+                                            </CardContent>
+                                        </Card>
                                     )}
 
                                     {activeTab === "stats" && (
@@ -691,6 +900,7 @@ export default function CharacterSheet() {
                                 {[
                                     { id: "general", label: "Инфо", icon: User },
                                     { id: "combat", label: "Бой", icon: Sword },
+                                    { id: "skills", label: "Навыки", icon: BookOpen },
                                     { id: "stats", label: "Хар-ки", icon: FileText },
                                     { id: "inventory", label: "Вещи", icon: Backpack },
                                 ].map((tab) => (
