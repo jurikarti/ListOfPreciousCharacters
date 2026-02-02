@@ -186,19 +186,30 @@ export default function CharacterSheet() {
                     <Card>
                         <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
                         <CardContent className="space-y-4">
-                            {(['hp', 'mp', 'wp'] as const).map((pool) => (
-                                <div key={pool} className="space-y-2">
-                                    <div className="flex justify-between text-xs font-bold uppercase">
-                                        <span>{pool}</span>
-                                        <span>{values[pool]?.current} / {values[pool]?.max}</span>
+                            {(['hp', 'mp', 'wp'] as const).map((pool) => {
+                                const colors: Record<string, string> = {
+                                    hp: "bg-red-500/80 dark:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
+                                    mp: "bg-blue-500/80 dark:bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
+                                    wp: "bg-purple-500/80 dark:bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]",
+                                };
+                                return (
+                                    <div key={pool} className="space-y-2">
+                                        <div className="flex justify-between text-xs font-bold uppercase">
+                                            <span>{pool}</span>
+                                            <span>{values[pool]?.current} / {values[pool]?.max}</span>
+                                        </div>
+                                        <Progress
+                                            value={(values[pool]?.current / (values[pool]?.max || 1)) * 100}
+                                            className="h-3"
+                                            indicatorClassName={colors[pool]}
+                                        />
+                                        <div className="flex gap-2">
+                                            <Input type="number" placeholder="Тек." {...register(`${pool}.current`)} className="h-8" />
+                                            <Input type="number" placeholder="Макс." {...register(`${pool}.max`)} className="h-8" />
+                                        </div>
                                     </div>
-                                    <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} />
-                                    <div className="flex gap-2">
-                                        <Input type="number" placeholder="Тек." {...register(`${pool}.current`)} className="h-8" />
-                                        <Input type="number" placeholder="Макс." {...register(`${pool}.max`)} className="h-8" />
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </CardContent>
                     </Card>
                 </div>
@@ -206,66 +217,160 @@ export default function CharacterSheet() {
                 {/* Центральная колонка */}
                 <div className="col-span-12 lg:col-span-9 space-y-4">
                     <Card>
-                        <CardContent className="p-4 grid grid-cols-3 gap-4">
-                            <div className="col-span-2 grid grid-cols-2 gap-4">
-                                <div>
-                                    <Label className="text-xs">Жизненный путь</Label>
-                                    <div className="grid grid-cols-1 gap-2 mt-1">
-                                        <Input placeholder="Происхождение" {...register("origin")} />
-                                        <Input placeholder="Секрет" {...register("secret")} />
-                                        <Input placeholder="Будущее" {...register("future")} />
-                                        <Input placeholder="Фокусирующий предмет" {...register("focusItem")} />
+                        <CardContent className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* Column 1: Vital Path */}
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Жизненный путь</h3>
+                                <div className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Происхождение</Label>
+                                        <Input {...register("origin")} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Секрет</Label>
+                                        <Input {...register("secret")} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Будущее</Label>
+                                        <Input {...register("future")} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs">Фокусирующий предмет</Label>
+                                        <Input {...register("focusItem")} />
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Column 2: Combat Parameters */}
+                            <div className="space-y-4">
+                                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
+                                <div className="space-y-3">
+                                    {(['magicPower', 'evasion', 'defense'] as const).map(key => {
+                                        const combatStat = values.combat?.[key];
+                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                        return (
+                                            <div key={key} className="space-y-1">
+                                                <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="relative flex-grow">
+                                                        <Input {...register(`combat.${key}.check`)} className="pr-8" placeholder="2d6" />
+                                                    </div>
+                                                    <span className="text-muted-foreground">+</span>
+                                                    <Input {...register(`combat.${key}.modifier`)} className="w-16 text-center" placeholder="Mod" />
+                                                    <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[3rem] justify-center font-mono text-sm border">
+                                                        {total || "—"}
+                                                    </div>
+                                                    <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}>
+                                                        <Dice5 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Column 3: Stats & Special */}
+                            <div className="space-y-6">
+                                {/* GL & Exp - Stylized */}
+                                <div className="flex gap-4">
+                                    {/* GL - Hero Badge Style */}
+                                    <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
+                                        <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:bg-primary/30 transition-all" />
+
+                                        {/* Circular Progress SVG */}
+                                        <div className="absolute inset-0 transform -rotate-90">
+                                            <svg className="w-full h-full" viewBox="0 0 100 100">
+                                                {/* Background Circle */}
+                                                <circle
+                                                    className="text-muted stroke-current"
+                                                    strokeWidth="8"
+                                                    fill="transparent"
+                                                    r="42"
+                                                    cx="50"
+                                                    cy="50"
+                                                />
+                                                {/* Progress Circle */}
+                                                <circle
+                                                    className="text-primary stroke-current transition-all duration-500 ease-out"
+                                                    strokeWidth="8"
+                                                    strokeLinecap="round"
+                                                    fill="transparent"
+                                                    r="42"
+                                                    cx="50"
+                                                    cy="50"
+                                                    style={{
+                                                        strokeDasharray: 263.89, // 2 * PI * 42
+                                                        strokeDashoffset: 263.89 - ((values.level || 0) / 10) * 263.89
+                                                    }}
+                                                />
+                                            </svg>
+                                        </div>
+
+                                        <div className="relative z-10 flex flex-col items-center justify-center">
+                                            <span className="text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground absolute -top-3">GL</span>
+                                            <Input
+                                                type="number"
+                                                {...register("level", {
+                                                    valueAsNumber: true,
+                                                    onChange: (e) => {
+                                                        const val = parseInt(e.target.value);
+                                                        if (val > 10) e.target.value = "10";
+                                                        if (val < 1) e.target.value = "1";
+                                                    }
+                                                })}
+                                                min={1}
+                                                max={10}
+                                                className="w-16 h-10 text-4xl text-center font-black bg-transparent border-none shadow-none focus-visible:ring-0 p-0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Exp - Solid Display */}
+                                    <div className="flex-grow flex flex-col justify-center gap-1.5">
+                                        <div className="flex justify-between items-baseline px-1">
+                                            <Label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Опыт (XP)</Label>
+                                            <span className="text-[10px] text-muted-foreground">Total</span>
+                                        </div>
+                                        <div className="relative">
+                                            <Input
+                                                type="number"
+                                                {...register("exp")}
+                                                className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20 focus-visible:border-primary/50"
+                                            />
+                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                            </div>
+                                        </div>
+                                        <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden">
+                                            <div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: '100%' }} />
+                                            {/* decorative bar since we don't have max xp */}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Special Checks */}
                                 <div>
-                                    <Label className="text-xs">Боевые параметры</Label>
-                                    <div className="space-y-2 mt-1">
-                                        {(['magicPower', 'evasion', 'defense'] as const).map(key => {
+                                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-3">Особые проверки</h3>
+                                    <div className="space-y-3">
+                                        {(['enemyRecognition', 'evaluation'] as const).map(key => {
                                             const combatStat = values.combat?.[key];
                                             const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
                                             return (
-                                                <div key={key} className="text-xs">
-                                                    <Label>{combatStatLabels[key]}</Label>
-                                                    <div className="flex items-center gap-1">
-                                                        <Input {...register(`combat.${key}.check`)} className="h-8" />
-                                                        <Input {...register(`combat.${key}.modifier`)} className="h-8 w-20" />
-                                                        <Input value={total} readOnly className="h-8 flex-grow bg-muted" />
-                                                        <Button type="button" size="icon" className="h-8 w-8" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                <div key={key} className="space-y-1">
+                                                    <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
+                                                        <span className="text-muted-foreground small">+</span>
+                                                        <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="0" />
+                                                        <Button type="button" size="icon" variant="secondary" className="h-9 w-9 shrink-0" onClick={() => rollDice(total, combatStatLabels[key])}>
+                                                            <Dice5 className="w-4 h-4" />
+                                                        </Button>
                                                     </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
-                                </div>
-                            </div>
-                            <div className="flex flex-col items-center justify-center gap-4">
-                                <div className="flex items-end gap-4">
-                                    <div className="space-y-1 text-center">
-                                        <Label>GL</Label>
-                                        <Input type="number" {...register("level")} className="w-20 h-20 text-4xl text-center font-bold" />
-                                    </div>
-                                    <div className="space-y-1 text-center">
-                                        <Label>Опыт</Label>
-                                        <Input type="number" {...register("exp")} className="w-24 h-10 text-center" />
-                                    </div>
-                                </div>
-                                <div className="space-y-2 w-full">
-                                    <Label className="text-xs">Особые проверки</Label>
-                                    {(['enemyRecognition', 'evaluation'] as const).map(key => {
-                                        const combatStat = values.combat?.[key];
-                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
-                                        return (
-                                            <div key={key} className="text-xs">
-                                                <Label>{combatStatLabels[key]}</Label>
-                                                <div className="flex items-center gap-1">
-                                                    <Input {...register(`combat.${key}.check`)} className="h-8" />
-                                                    <Input {...register(`combat.${key}.modifier`)} className="h-8 w-20" />
-                                                    <Input value={total} readOnly className="h-8 flex-grow bg-muted" />
-                                                    <Button type="button" size="icon" className="h-8 w-8" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
                                 </div>
                             </div>
                         </CardContent>

@@ -34,7 +34,7 @@ export const characterSchema = z.object({
     name: z.string(),
     playerName: z.string(),
     mentor: z.string(),
-    level: z.coerce.number(),
+    level: z.coerce.number().min(1).max(10),
     exp: z.coerce.number(),
 
     // Жизненный путь
