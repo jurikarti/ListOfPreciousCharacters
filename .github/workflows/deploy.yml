@@ -1,4 +1,4 @@
-name: Deploy to Server
+name: Deploy
 
 on:
   push:
@@ -16,20 +16,17 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            # 1. Загружаем NVM принудительно
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            
-            # 2. Переключаемся на Node 20 (или устанавливаем, если нет)
-            nvm use 20 || nvm install 20
-            
-            # 3. Переходим в проект и решаем конфликт файлов
+            # Переходим в папку проекта
             cd /root/ListOfPreciousCharacters/pdcsw
-            git reset --hard
+            
+            # Скачиваем обновления
             git pull origin tauri-memories-list
             
-            # 4. Установка зависимостей и билд
-            # Чистим старое, чтобы избежать ошибок совместимости
-            rm -rf node_modules package-lock.json 
+            # Обновляем библиотеки (на случай, если добавил новые)
             npm install
+            
+            # Собираем проект
             npm run build
+            
+            # Так как у нас Nginx просто раздает папку 'out', перезапускать ничего не надо!
+            # Nginx сразу начнет отдавать новые файлы.
