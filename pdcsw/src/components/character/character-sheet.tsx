@@ -15,12 +15,15 @@ import { ImageUpload } from "./image-upload";
 import { ResetModal } from "./reset-modal";
 import { MemoriesSheet } from "./memories-sheet";
 import { SkillsManager } from "./skills-manager";
+import { InventoryManager } from "./inventory-manager";
 import { CreditsModal } from "./credits-modal";
-import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen } from "lucide-react";
-import { ModeToggle } from "@/components/ui/mode-toggle";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { unequipItem, EquipmentSlotKey } from "@/lib/equipment-logic";
 import { toast } from "sonner";
+import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown } from "lucide-react";
+import { ModeToggle } from "@/components/ui/mode-toggle";
+
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     DropdownMenu,
@@ -114,6 +117,20 @@ export default function CharacterSheet() {
     const [activeTab, setActiveTab] = useState<TabType>("general");
     const [direction, setDirection] = useState(0);
 
+    // Fix for duplicate inputs: Check screen size
+    const [mounted, setMounted] = useState(false);
+    const [isDesktop, setIsDesktop] = useState(true); // Default to true to avoid hydration mismatch flickering if possible, or false.
+
+    useEffect(() => {
+        setMounted(true);
+        const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+        checkDesktop();
+        window.addEventListener('resize', checkDesktop);
+        return () => window.removeEventListener('resize', checkDesktop);
+    }, []);
+
+    // ... (rest of hook calls)
+
     const handleTabChange = (newTab: TabType) => {
         const currentIndex = tabs.indexOf(activeTab);
         const nextIndex = tabs.indexOf(newTab);
@@ -122,10 +139,13 @@ export default function CharacterSheet() {
         setActiveTab(newTab);
     };
 
+
+
+
     const form = useForm<CharacterSheetData>({
         resolver: zodResolver(characterSchema),
         defaultValues: defaultCharacter,
-        mode: "onChange",
+        mode: "onBlur",
     });
 
     const { register, control, watch, reset, getValues, setValue } = form;
@@ -133,12 +153,17 @@ export default function CharacterSheet() {
 
     const { fields: skills, append: appendSkill, remove: removeSkill } = useFieldArray({ control, name: "skills" });
     const { fields: enchantments, append: appendEnchantment, remove: removeEnchantment } = useFieldArray({ control, name: "enchantments" });
-    const { fields: inventory, append: appendInventory, remove: removeInventory } = useFieldArray({ control, name: "inventory" });
 
-    // Безопасный подсчет веса
-    const inventoryWeight = (values.inventory || []).reduce((acc: number, item: { weight: number }) => acc + (Number(item.weight) || 0), 0);
+    // Using watch for inventory instead of FieldArray for DB-driven approach
+    // const {fields: inventory, append: appendInventory, remove: removeInventory } = useFieldArray({
+    //     control: form.control,
+    //     name: "inventory",
+    // });
+    const inventory = form.watch("inventory") || [];
+
+    // Calculate totals
     const equipmentWeight = Object.values(values.equipment || {}).reduce((acc: number, item: { weight: number }) => acc + (Number(item.weight) || 0), 0);
-    const currentWeight = inventoryWeight + equipmentWeight;
+    const currentWeight = (inventory?.reduce((sum, item) => sum + (Number(item.weight) || 0), 0) || 0) + equipmentWeight;
 
     // Загрузка, сохранение, импорт/экспорт...
     useEffect(() => {
@@ -147,8 +172,18 @@ export default function CharacterSheet() {
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    reset(parsed);
-                    toast.success("Данные успешно восстановлены");
+                    const result = characterSchema.safeParse(parsed);
+
+                    if (result.success) {
+                        reset(result.data);
+                        toast.success("Данные успешно восстановлены");
+                    } else {
+                        console.error("Validation error in saved data:", result.error);
+                        toast.error("Ошибка валидации сохраненных данных. Некоторые поля могут быть сброшены.");
+                        // Optional: Attempt to load partial data or just fail? 
+                        // For safety, let's try to load what we parsed but warn user
+                        reset(parsed);
+                    }
                 } catch (e) { console.error("Ошибка загрузки автосохранения", e); }
             }
         }
@@ -157,6 +192,8 @@ export default function CharacterSheet() {
     useEffect(() => {
         const subscription = watch((value) => {
             if (value) {
+                // Ensure we only save if it looks roughly like an object? 
+                // Watch returns the form data, usually safe to stringify.
                 localStorage.setItem("pd-character-data", JSON.stringify(value));
             }
         });
@@ -182,8 +219,17 @@ export default function CharacterSheet() {
         reader.onload = (event) => {
             try {
                 const json = JSON.parse(event.target?.result as string);
-                reset(json);
-                toast.success("Персонаж и медиа-данные загружены");
+                const result = characterSchema.safeParse(json);
+
+                if (result.success) {
+                    reset(result.data);
+                    toast.success("Персонаж и медиа-данные загружены");
+                } else {
+                    console.error("Import Validation Error:", result.error);
+                    toast.error("Ошибка: Неверный формат файла персонажа.");
+                    // For file import, strictly reject invalid schema to avoid corrupting current state
+                    // allowing partial load might be confusing.
+                }
             } catch (err) {
                 console.error("Import error:", err);
                 toast.error("Ошибка при чтении файла");
@@ -212,10 +258,12 @@ export default function CharacterSheet() {
         return acc;
     }, {} as Record<typeof statKeys[number], { baseSum: number; dividedBy3: number; finalStat: number }>);
 
+    if (!mounted) return null;
+
     return (
         <div className="container mx-auto p-2 md:p-6 space-y-4 max-w-screen-2xl font-sans">
             {/* Верхняя панель */}
-            <header className="flex flex-col gap-4 bg-zinc-100/50 dark:bg-zinc-900/50 p-4 rounded-xl border shadow-sm z-20 backdrop-blur-md">
+            <header className="flex flex-col gap-4 bg-zinc-100/50 dark:bg-zinc-900/50 p-4 rounded-xl border shadow-sm z-20 backdrop-blur-md relative">
                 <div className="flex justify-between items-center w-full">
                     <div className="flex items-center gap-2">
                         {values.image && (
@@ -314,464 +362,116 @@ export default function CharacterSheet() {
                         <MemoriesSheet register={register} control={control} values={values} rollDice={rollDice} />
                     </motion.div>
                 ) : (
-                    <motion.div
-                        key="character"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.3 }}
-                    >
+                    <div key="character">
                         {/* Desktop View: Grid layout, always visible as a unit */}
-                        <div className="hidden lg:grid grid-cols-12 gap-4">
-                            {/* ... existing desktop grid content ... */}
-                            {/* Left Column */}
-                            <div className="col-span-3 space-y-4">
-                                {/* Внешность */}
-                                <Card>
-                                    <CardHeader><CardTitle className="text-sm">Внешность</CardTitle></CardHeader>
-                                    <CardContent>
-                                        <Controller name="image" control={control} render={({ field }) => <ImageUpload value={field.value} onChange={field.onChange} />} />
-                                        <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-                                            {(['age', 'gender', 'height', 'hairColor', 'eyeColor', 'skinColor'] as const).map(key => (
-                                                <div key={key} className="space-y-1">
-                                                    <Label className="text-xs text-muted-foreground">{key === 'age' ? 'Возраст' : key === 'gender' ? 'Пол' : key === 'height' ? 'Рост' : key === 'hairColor' ? 'Цвет волос' : key === 'eyeColor' ? 'Цвет глаз' : 'Цвет кожи'}</Label>
-                                                    <Input {...register(key)} />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Ресурсы */}
-                                <Card>
-                                    <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
-                                    <CardContent className="space-y-4">
-                                        {(['hp', 'mp', 'wp'] as const).map((pool) => {
-                                            const colors: Record<string, string> = {
-                                                hp: "bg-red-500/80 dark:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
-                                                mp: "bg-blue-500/80 dark:bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
-                                                wp: "bg-purple-500/80 dark:bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]",
-                                            };
-                                            return (
-                                                <div key={pool} className="space-y-2">
-                                                    <div className="flex justify-between text-xs font-bold uppercase"><span>{pool}</span><span>{values[pool]?.current} / {values[pool]?.max}</span></div>
-                                                    <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} className="h-3" indicatorClassName={colors[pool]} />
-                                                    <div className="flex gap-2">
-                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Тек.</Label><Input type="number" {...register(`${pool}.current`)} className="h-8" /></div>
-                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Макс.</Label><Input type="number" {...register(`${pool}.max`)} className="h-8" /></div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {/* Right Column */}
-                            <div className="col-span-9 space-y-4">
-                                <Card>
-                                    <CardContent className="p-6 grid grid-cols-3 gap-8">
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Жизненный путь</h3>
-                                            <div className="space-y-3">
-                                                {(['origin', 'secret', 'future', 'focusItem'] as const).map(key => (
+                        {isDesktop && (
+                            <div className="hidden lg:grid grid-cols-12 gap-4">
+                                {/* ... existing desktop grid content ... */}
+                                {/* Left Column */}
+                                <div className="col-span-3 space-y-4">
+                                    {/* Внешность */}
+                                    <Card>
+                                        <CardHeader><CardTitle className="text-sm">Внешность</CardTitle></CardHeader>
+                                        <CardContent>
+                                            <Controller name="image" control={control} render={({ field }) => <ImageUpload value={field.value} onChange={field.onChange} />} />
+                                            <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                                                {(['age', 'gender', 'height', 'hairColor', 'eyeColor', 'skinColor'] as const).map(key => (
                                                     <div key={key} className="space-y-1">
-                                                        <Label className="text-xs">{key === 'origin' ? 'Происхождение' : key === 'secret' ? 'Секрет' : key === 'future' ? 'Будущее' : 'Фокусирующий предмет'}</Label>
+                                                        <Label className="text-xs text-muted-foreground">{key === 'age' ? 'Возраст' : key === 'gender' ? 'Пол' : key === 'height' ? 'Рост' : key === 'hairColor' ? 'Цвет волос' : key === 'eyeColor' ? 'Цвет глаз' : 'Цвет кожи'}</Label>
                                                         <Input {...register(key)} />
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        </CardContent>
+                                    </Card>
 
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
-                                            <div className="space-y-3">
-                                                {(['magicPower', 'evasion', 'defense'] as const).map(key => {
-                                                    const combatStat = values.combat?.[key];
-                                                    const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
-                                                    return (
-                                                        <div key={key} className="space-y-1">
-                                                            <Label className="text-xs">{combatStatLabels[key]}</Label>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="relative flex-grow"><Input {...register(`combat.${key}.check`)} className="pr-8" placeholder="2d6" /></div>
-                                                                <span className="text-muted-foreground">+</span>
-                                                                <Input {...register(`combat.${key}.modifier`)} className="w-16 text-center" placeholder="Mod" />
-                                                                <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[3rem] justify-center font-mono text-sm border">{total || "—"}</div>
-                                                                <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
-                                                            </div>
+                                    {/* Ресурсы */}
+                                    <Card>
+                                        <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
+                                        <CardContent className="space-y-4">
+                                            {(['hp', 'mp', 'wp'] as const).map((pool) => {
+                                                const colors: Record<string, string> = {
+                                                    hp: "bg-red-500/80 dark:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
+                                                    mp: "bg-blue-500/80 dark:bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
+                                                    wp: "bg-purple-500/80 dark:bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]",
+                                                };
+                                                return (
+                                                    <div key={pool} className="space-y-2">
+                                                        <div className="flex justify-between text-xs font-bold uppercase"><span>{pool}</span><span>{values[pool]?.current} / {values[pool]?.max}</span></div>
+                                                        <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} className="h-3" indicatorClassName={colors[pool]} />
+                                                        <div className="flex gap-2">
+                                                            <div className="w-1/2 space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Тек.</Label><Input type="number" {...register(`${pool}.current`)} className="h-8" /></div>
+                                                            <div className="w-1/2 space-y-1"><Label className="text-[10px] uppercase text-muted-foreground">Макс.</Label><Input type="number" {...register(`${pool}.max`)} className="h-8" /></div>
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </CardContent>
+                                    </Card>
+                                </div>
 
-                                        <div className="space-y-6">
-                                            <div className="flex gap-4">
-                                                <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
-                                                    <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:bg-primary/30 transition-all" />
-                                                    <div className="absolute inset-0 transform -rotate-90">
-                                                        <svg className="w-full h-full" viewBox="0 0 100 100">
-                                                            <circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" />
-                                                            <circle className="text-primary stroke-current transition-all duration-500 ease-out" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 6) * 263.89 }} />
-                                                        </svg>
-                                                    </div>
-                                                    <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
-                                                </div>
-                                                <div className="flex flex-col justify-center gap-1 -ml-2">
-                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
-                                                    <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
-                                                </div>
-                                                <div className="flex-grow flex flex-col justify-center gap-1.5">
-                                                    <div className="flex justify-between items-baseline px-1">
-                                                        <Label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Опыт (XP)</Label>
-                                                        {(values.exp || 0) >= 10000 && (
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="default" // Use primary color to stand out
-                                                                className="h-6 text-[10px] px-2 animate-pulse bg-green-600 hover:bg-green-700 text-white shadow-[0_0_10px_rgba(22,163,74,0.5)]"
-                                                                onClick={() => {
-                                                                    const currentLevel = values.level || 0;
-                                                                    if (currentLevel < 6) {
-                                                                        setValue("level", currentLevel + 1);
-                                                                        setValue("exp", 0);
-                                                                        toast.success(`Уровень повышен! GL: ${currentLevel + 1}`);
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <ArrowUpCircle className="w-3 h-3 mr-1" />
-                                                                Level Up
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                    <div className="relative"><Input type="number" {...register("exp")} className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20" /><div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50"><div className="w-1.5 h-1.5 rounded-full bg-primary" /></div></div>
-                                                    <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: `${Math.min(((values.exp || 0) / 10000) * 100, 100)}%` }} /></div>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-3">
-                                                {(['enemyRecognition', 'evaluation'] as const).map(key => {
-                                                    const combatStat = values.combat?.[key];
-                                                    const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
-                                                    return (
+                                {/* Right Column */}
+                                <div className="col-span-9 space-y-4">
+                                    <Card>
+                                        <CardContent className="p-6 grid grid-cols-3 gap-8">
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Жизненный путь</h3>
+                                                <div className="space-y-3">
+                                                    {(['origin', 'secret', 'future', 'focusItem'] as const).map(key => (
                                                         <div key={key} className="space-y-1">
-                                                            <Label className="text-xs">{combatStatLabels[key]}</Label>
-                                                            <div className="flex items-center gap-2">
-                                                                <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
-                                                                <span className="text-muted-foreground small">+</span>
-                                                                <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="0" />
-                                                                <Button type="button" size="icon" variant="secondary" className="h-9 w-9 shrink-0" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
-                                                            </div>
+                                                            <Label className="text-xs">{key === 'origin' ? 'Происхождение' : key === 'secret' ? 'Секрет' : key === 'future' ? 'Будущее' : 'Фокусирующий предмет'}</Label>
+                                                            <Input {...register(key)} />
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* Stats Table */}
-                                <Card>
-                                    <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
-                                    <CardContent>
-                                        <div className="rounded-md border overflow-x-auto">
-                                            <table className="w-full text-sm min-w-[600px]">
-                                                <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground border-r w-[200px]">Параметр / Атрибут</th>{statKeys.map(key => (<th key={key} className="h-10 px-4 text-center align-middle font-medium text-muted-foreground border-r last:border-r-0">{statLabels[key]}</th>))}</tr></thead>
-                                                <tbody className="[&_tr:last-child]:border-0">
-                                                    <tr className="border-b">
-                                                        <td className="p-2 align-middle border-r">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
-                                                                        {values.raceName || "Выбрать расу"}
-                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="w-[180px]">
-                                                                    {Object.keys(RACES).map((race) => (
-                                                                        <DropdownMenuItem
-                                                                            key={race}
-                                                                            onClick={() => {
-                                                                                setValue("raceName", race);
-                                                                                const stats = RACES[race as keyof typeof RACES];
-                                                                                setValue("stats.body.race", stats.body);
-                                                                                setValue("stats.intellect.race", stats.intellect);
-                                                                                setValue("stats.mysticism.race", stats.mysticism);
-                                                                                setValue("stats.agility.race", stats.agility);
-                                                                                setValue("stats.passion.race", stats.passion);
-                                                                                setValue("stats.charisma.race", stats.charisma);
-                                                                            }}
-                                                                        >
-                                                                            {race}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
-                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
-                                                    </tr>
-                                                    <tr className="border-b">
-                                                        <td className={`p-2 align-middle border-r font-medium text-xs ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : "text-muted-foreground"}`}>
-                                                            Бонус ({Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0)}/5 очков)
-                                                        </td>
-                                                        {statKeys.map(key => (
-                                                            <td key={key} className="p-2 align-middle border-r last:border-r-0">
-                                                                <Input
-                                                                    type="number"
-                                                                    {...register(`stats.${key}.bonus`)}
-                                                                    className={`h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : ""}`}
-                                                                />
-                                                            </td>
-                                                        ))}
-                                                    </tr>
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r font-semibold text-xs">Сумма базовых значений</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                    <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 align-middle border-r font-semibold text-xs text-foreground">(Базовое значение ÷ 3)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                    <tr className="border-b">
-                                                        <td className="p-2 align-middle border-r">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
-                                                                        {values.styleName || "Выбрать стиль"}
-                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="w-[180px]">
-                                                                    {Object.keys(STYLES).map((style) => (
-                                                                        <DropdownMenuItem
-                                                                            key={style}
-                                                                            onClick={() => {
-                                                                                setValue("styleName", style);
-                                                                                const data = STYLES[style as keyof typeof STYLES];
-                                                                                setValue("stats.body.style", data.stats.body);
-                                                                                setValue("stats.intellect.style", data.stats.intellect);
-                                                                                setValue("stats.mysticism.style", data.stats.mysticism);
-                                                                                setValue("stats.agility.style", data.stats.agility);
-                                                                                setValue("stats.passion.style", data.stats.passion);
-                                                                                setValue("stats.charisma.style", data.stats.charisma);
-                                                                                // Update Max HP/MP
-                                                                                setValue("hp.max", data.hp);
-                                                                                setValue("mp.max", data.mp);
-                                                                                toast.success(`Стиль ${style} выбран! HP/MP обновлены.`);
-                                                                            }}
-                                                                        >
-                                                                            {style}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
-                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
-                                                    </tr>
-                                                    <tr className="border-b">
-                                                        <td className="p-2 align-middle border-r">
-                                                            <DropdownMenu>
-                                                                <DropdownMenuTrigger asChild>
-                                                                    <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
-                                                                        {values.elementName || "Выбрать стихию"}
-                                                                        <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                    </Button>
-                                                                </DropdownMenuTrigger>
-                                                                <DropdownMenuContent align="start" className="w-[180px]">
-                                                                    {Object.keys(ELEMENTS).map((element) => (
-                                                                        <DropdownMenuItem
-                                                                            key={element}
-                                                                            onClick={() => {
-                                                                                setValue("elementName", element);
-                                                                                const stats = ELEMENTS[element as keyof typeof ELEMENTS];
-                                                                                setValue("stats.body.element", stats.body);
-                                                                                setValue("stats.intellect.element", stats.intellect);
-                                                                                setValue("stats.mysticism.element", stats.mysticism);
-                                                                                setValue("stats.agility.element", stats.agility);
-                                                                                setValue("stats.passion.element", stats.passion);
-                                                                                setValue("stats.charisma.element", stats.charisma);
-                                                                            }}
-                                                                        >
-                                                                            {element}
-                                                                        </DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuContent>
-                                                            </DropdownMenu>
-                                                        </td>
-                                                        {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
-                                                    </tr>
-                                                    <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-3 align-middle border-r font-bold text-primary">ХАРАКТЕРИСТИКИ</td>{statKeys.map(key => (<td key={key} className="p-3 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.finalStat || 0} className="h-9 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-bold text-xl p-0" /></td>))}</tr>
-                                                    <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Другие корректировки</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
-                                                    <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                {/* --- SKILLS --- */}
-                                <Card className="p-4 relative overflow-hidden">
-                                    <SkillsManager
-                                        form={form}
-                                        level={values.level || 0}
-                                        raceName={values.raceName}
-                                        styleName={values.styleName}
-                                    />
-                                </Card>
-
-                                {/* Equipment & Inventory */}
-                                <Card>
-                                    <CardHeader><CardTitle className="text-sm">Экипировка и Инвентарь</CardTitle></CardHeader>
-                                    <CardContent>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-xs min-w-[700px]">
-                                                <thead><tr><th className="text-left">Слот/Предмет</th><th className="w-16">Вес</th><th className="w-16">Попад.</th><th className="w-24">Урон</th><th className="w-16">Дальн.</th><th className="w-16">Уклон.</th><th className="w-16">Защита</th><th className="text-left">Примечание</th></tr></thead>
-                                                <tbody>
-                                                    {(Object.keys(equipmentSlotLabels) as Array<keyof typeof equipmentSlotLabels>).map((slot) => (
-                                                        <tr key={String(slot)} className="border-b border-muted/50 last:border-0 align-bottom">
-                                                            <td className="py-2 px-1"><div className="flex flex-col gap-0.5"><span className="text-[10px] text-muted-foreground font-semibold uppercase">{equipmentSlotLabels[slot]}</span><Input {...register(`equipment.${slot}.name`)} className="h-8" /></div></td>
-                                                            <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.weight`)} className="h-8" /></td>
-                                                            <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.hit`)} className="h-8" /></td>
-                                                            <td className="py-2 px-1"><div className="flex items-center gap-1"><Input {...register(`equipment.${slot}.damage`)} className="h-8" /><Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button></div></td>
-                                                            <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.range`)} className="h-8" /></td>
-                                                            <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.evasion`)} className="h-8" /></td>
-                                                            <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.defense`)} className="h-8" /></td>
-                                                            <td className="py-2 px-1"><Input {...register(`equipment.${slot}.notes`)} className="h-8" /></td>
-                                                        </tr>
                                                     ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <div className="mt-6 flex flex-col gap-3">
-                                            <div className="flex justify-between items-center mb-1"><Label>Снаряжение (в рюкзаке)</Label><div className="text-sm">Вес: {currentWeight.toFixed(1)} / {values.maxWeight}</div></div>
-                                            {inventory.map((item, index) => (
-                                                <div key={item.id} className="flex gap-2 items-center"><Input {...register(`inventory.${index}.name`)} placeholder={`Предмет ${index + 1}`} className="h-8 flex-grow" /><div className="flex items-center gap-1"><Label className="text-xs">Вес:</Label><Input type="number" {...register(`inventory.${index}.weight`)} className="h-8 w-20" /></div><Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => removeInventory(index)}><Trash2 className="w-4 h-4" /></Button></div>
-                                            ))}
-                                            <Button type="button" variant="outline" size="sm" className="w-full mt-2 border-dashed" onClick={() => appendInventory({ name: "", weight: 0 })}><PlusCircle className="w-4 h-4 mr-2" /> Добавить предмет</Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </div>
-
-                        {/* Mobile View: Swipeable sections */}
-                        <div className="lg:hidden relative min-h-[500px] overflow-x-hidden pb-12">
-                            <AnimatePresence mode="popLayout" initial={false} custom={direction}>
-                                <motion.div
-                                    key={activeTab}
-                                    custom={direction}
-                                    variants={slideVariants}
-                                    initial="enter"
-                                    animate="center"
-                                    exit="exit"
-                                    transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
-                                    drag="x"
-                                    dragConstraints={{ left: 0, right: 0 }}
-                                    dragElastic={0.4}
-                                    onDragEnd={(_, info) => {
-                                        const swipeThreshold = 50;
-                                        if (info.offset.x < -swipeThreshold) {
-                                            const currentIndex = tabs.indexOf(activeTab);
-                                            if (currentIndex < tabs.length - 1) handleTabChange(tabs[currentIndex + 1]);
-                                        } else if (info.offset.x > swipeThreshold) {
-                                            const currentIndex = tabs.indexOf(activeTab);
-                                            if (currentIndex > 0) handleTabChange(tabs[currentIndex - 1]);
-                                        }
-                                    }}
-                                    className="space-y-4 w-full"
-                                >
-                                    {activeTab === "general" && (
-                                        <>
-                                            <Card>
-                                                <div className="p-4 grid grid-cols-2 gap-4">
-                                                    <div className="space-y-1 col-span-2">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Имя персонажа</Label>
-                                                        <Input {...register("name")} className="h-9" />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Игрок</Label>
-                                                        <Input {...register("playerName")} className="h-9" />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Наставник</Label>
-                                                        <Input {...register("mentor")} className="h-9" />
-                                                    </div>
-                                                    <div className="space-y-1 col-span-2">
-                                                        <Label className="text-[10px] uppercase text-muted-foreground font-bold">Имя Мастера</Label>
-                                                        <Input {...register("masterName")} className="h-9" />
-                                                    </div>
                                                 </div>
-                                            </Card>
-                                            <Card>
-                                                <CardHeader><CardTitle className="text-sm">Внешность</CardTitle></CardHeader>
-                                                <CardContent>
-                                                    <Controller name="image" control={control} render={({ field }) => <ImageUpload value={field.value} onChange={field.onChange} />} />
-                                                    <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-                                                        {(['age', 'gender', 'height', 'hairColor', 'eyeColor', 'skinColor'] as const).map(key => (
-                                                            <div key={key} className="space-y-1">
-                                                                <Label className="text-xs text-muted-foreground">{key === 'age' ? 'Возраст' : key === 'gender' ? 'Пол' : key === 'height' ? 'Рост' : key === 'hairColor' ? 'Цвет волос' : key === 'eyeColor' ? 'Цвет глаз' : 'Цвет кожи'}</Label>
-                                                                <Input {...register(key)} />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                            <Card>
-                                                <CardContent className="p-6 space-y-4">
-                                                    <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Жизненный путь</h3>
-                                                    <div className="space-y-3">
-                                                        {(['origin', 'secret', 'future', 'focusItem'] as const).map(key => (
-                                                            <div key={key} className="space-y-1">
-                                                                <Label className="text-xs">{key === 'origin' ? 'Происхождение' : key === 'secret' ? 'Секрет' : key === 'future' ? 'Будущее' : 'Фокусирующий предмет'}</Label>
-                                                                <Input {...register(key)} />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
-                                        </>
-                                    )}
+                                            </div>
 
-                                    {activeTab === "combat" && (
-                                        <>
-                                            <Card>
-                                                <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
-                                                <CardContent className="space-y-4">
-                                                    {(['hp', 'mp', 'wp'] as const).map((pool) => {
-                                                        const colors: Record<string, string> = {
-                                                            hp: "bg-red-500/80 dark:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
-                                                            mp: "bg-blue-500/80 dark:bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
-                                                            wp: "bg-purple-500/80 dark:bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]",
-                                                        };
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
+                                                <div className="space-y-3">
+                                                    {(['magicPower', 'evasion', 'defense'] as const).map(key => {
+                                                        const combatStat = values.combat?.[key];
+                                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
                                                         return (
-                                                            <div key={pool} className="space-y-2">
-                                                                <div className="flex justify-between text-xs font-bold uppercase"><span>{pool}</span><span>{values[pool]?.current} / {values[pool]?.max}</span></div>
-                                                                <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} className="h-3" indicatorClassName={colors[pool]} />
-                                                                <div className="flex gap-2">
-                                                                    <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Тек.</Label><Input type="number" {...register(`${pool}.current`)} className="h-8" /></div>
-                                                                    <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Макс.</Label><Input type="number" {...register(`${pool}.max`)} className="h-8" /></div>
+                                                            <div key={key} className="space-y-1">
+                                                                <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="relative flex-grow"><Input {...register(`combat.${key}.check`)} className="pr-8" placeholder="2d6" /></div>
+                                                                    <span className="text-muted-foreground">+</span>
+                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-16 text-center" placeholder="Mod" />
+                                                                    <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[3rem] justify-center font-mono text-sm border">{total || "—"}</div>
+                                                                    <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
                                                                 </div>
                                                             </div>
                                                         );
                                                     })}
-                                                </CardContent>
-                                            </Card>
-                                            <Card>
-                                                <CardContent className="p-6 space-y-6">
-                                                    <div className="flex justify-center gap-6">
-                                                        <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
-                                                            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl" />
-                                                            <div className="absolute inset-0 transform -rotate-90">
-                                                                <svg className="w-full h-full" viewBox="0 0 100 100"><circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" /><circle className="text-primary stroke-current" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 10) * 263.89 }} /></svg>
-                                                            </div>
-                                                            <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-6">
+                                                <div className="flex gap-4">
+                                                    <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
+                                                        <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:bg-primary/30 transition-all" />
+                                                        <div className="absolute inset-0 transform -rotate-90">
+                                                            <svg className="w-full h-full" viewBox="0 0 100 100">
+                                                                <circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" />
+                                                                <circle className="text-primary stroke-current transition-all duration-500 ease-out" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 6) * 263.89 }} />
+                                                            </svg>
                                                         </div>
-                                                        <div className="flex flex-col justify-center gap-2">
-                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
-                                                            <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
-                                                        </div>
+                                                        <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase tracking-widest text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
                                                     </div>
-                                                    <div className="space-y-2 px-2">
-                                                        <div className="flex justify-between items-baseline">
-                                                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Опыт (XP)</Label>
+                                                    <div className="flex flex-col justify-center gap-1 -ml-2">
+                                                        <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
+                                                        <Button type="button" variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
+                                                    </div>
+                                                    <div className="flex-grow flex flex-col justify-center gap-1.5">
+                                                        <div className="flex justify-between items-baseline px-1">
+                                                            <Label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Опыт (XP)</Label>
                                                             {(values.exp || 0) >= 10000 && (
                                                                 <Button
                                                                     type="button"
                                                                     size="sm"
-                                                                    variant="default"
+                                                                    variant="default" // Use primary color to stand out
                                                                     className="h-6 text-[10px] px-2 animate-pulse bg-green-600 hover:bg-green-700 text-white shadow-[0_0_10px_rgba(22,163,74,0.5)]"
                                                                     onClick={() => {
                                                                         const currentLevel = values.level || 0;
@@ -790,145 +490,489 @@ export default function CharacterSheet() {
                                                         <div className="relative"><Input type="number" {...register("exp")} className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20" /><div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50"><div className="w-1.5 h-1.5 rounded-full bg-primary" /></div></div>
                                                         <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: `${Math.min(((values.exp || 0) / 10000) * 100, 100)}%` }} /></div>
                                                     </div>
-                                                    <div className="space-y-4">
-                                                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
-                                                        {(['magicPower', 'evasion', 'defense'] as const).map(key => (
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {(['enemyRecognition', 'evaluation'] as const).map(key => {
+                                                        const combatStat = values.combat?.[key];
+                                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                                        return (
                                                             <div key={key} className="space-y-1">
                                                                 <Label className="text-xs">{combatStatLabels[key]}</Label>
                                                                 <div className="flex items-center gap-2">
                                                                     <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
-                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
-                                                                    <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                    <span className="text-muted-foreground small">+</span>
+                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="0" />
+                                                                    <Button type="button" size="icon" variant="secondary" className="h-9 w-9 shrink-0" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
                                                                 </div>
                                                             </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Stats Table */}
+                                    <Card>
+                                        <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
+                                        <CardContent>
+                                            <div className="rounded-md border overflow-x-auto">
+                                                <table className="w-full text-sm min-w-[600px]">
+                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground border-r w-[200px]">Параметр / Атрибут</th>{statKeys.map(key => (<th key={key} className="h-10 px-4 text-center align-middle font-medium text-muted-foreground border-r last:border-r-0">{statLabels[key]}</th>))}</tr></thead>
+                                                    <tbody className="[&_tr:last-child]:border-0">
+                                                        <tr className="border-b">
+                                                            <td className="p-2 align-middle border-r">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                            {values.raceName || "Выбрать расу"}
+                                                                            <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start" className="w-[180px]">
+                                                                        {Object.keys(RACES).map((race) => (
+                                                                            <DropdownMenuItem
+                                                                                key={race}
+                                                                                onClick={() => {
+                                                                                    setValue("raceName", race);
+                                                                                    const stats = RACES[race as keyof typeof RACES];
+                                                                                    setValue("stats.body.race", stats.body);
+                                                                                    setValue("stats.intellect.race", stats.intellect);
+                                                                                    setValue("stats.mysticism.race", stats.mysticism);
+                                                                                    setValue("stats.agility.race", stats.agility);
+                                                                                    setValue("stats.passion.race", stats.passion);
+                                                                                    setValue("stats.charisma.race", stats.charisma);
+                                                                                }}
+                                                                            >
+                                                                                {race}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </td>
+                                                            {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                        </tr>
+                                                        <tr className="border-b">
+                                                            <td className={`p-2 align-middle border-r font-medium text-xs ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : "text-muted-foreground"}`}>
+                                                                Бонус ({Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0)}/5 очков)
+                                                            </td>
+                                                            {statKeys.map(key => (
+                                                                <td key={key} className="p-2 align-middle border-r last:border-r-0">
+                                                                    <Input
+                                                                        type="number"
+                                                                        {...register(`stats.${key}.bonus`)}
+                                                                        className={`h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500 font-bold" : ""}`}
+                                                                    />
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                        <tr className="border-b"><td className="p-2 align-middle border-r font-semibold text-xs">Сумма базовых значений</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                        <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 align-middle border-r font-semibold text-xs text-foreground">(Базовое значение ÷ 3)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                        <tr className="border-b">
+                                                            <td className="p-2 align-middle border-r">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                            {values.styleName || "Выбрать стиль"}
+                                                                            <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start" className="w-[180px]">
+                                                                        {Object.keys(STYLES).map((style) => (
+                                                                            <DropdownMenuItem
+                                                                                key={style}
+                                                                                onClick={() => {
+                                                                                    setValue("styleName", style);
+                                                                                    const data = STYLES[style as keyof typeof STYLES];
+                                                                                    setValue("stats.body.style", data.stats.body);
+                                                                                    setValue("stats.intellect.style", data.stats.intellect);
+                                                                                    setValue("stats.mysticism.style", data.stats.mysticism);
+                                                                                    setValue("stats.agility.style", data.stats.agility);
+                                                                                    setValue("stats.passion.style", data.stats.passion);
+                                                                                    setValue("stats.charisma.style", data.stats.charisma);
+                                                                                    // Update Max HP/MP
+                                                                                    setValue("hp.max", data.hp);
+                                                                                    setValue("mp.max", data.mp);
+                                                                                    toast.success(`Стиль ${style} выбран! HP/MP обновлены.`);
+                                                                                }}
+                                                                            >
+                                                                                {style}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </td>
+                                                            {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                        </tr>
+                                                        <tr className="border-b">
+                                                            <td className="p-2 align-middle border-r">
+                                                                <DropdownMenu>
+                                                                    <DropdownMenuTrigger asChild>
+                                                                        <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50">
+                                                                            {values.elementName || "Выбрать стихию"}
+                                                                            <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                        </Button>
+                                                                    </DropdownMenuTrigger>
+                                                                    <DropdownMenuContent align="start" className="w-[180px]">
+                                                                        {Object.keys(ELEMENTS).map((element) => (
+                                                                            <DropdownMenuItem
+                                                                                key={element}
+                                                                                onClick={() => {
+                                                                                    setValue("elementName", element);
+                                                                                    const stats = ELEMENTS[element as keyof typeof ELEMENTS];
+                                                                                    setValue("stats.body.element", stats.body);
+                                                                                    setValue("stats.intellect.element", stats.intellect);
+                                                                                    setValue("stats.mysticism.element", stats.mysticism);
+                                                                                    setValue("stats.agility.element", stats.agility);
+                                                                                    setValue("stats.passion.element", stats.passion);
+                                                                                    setValue("stats.charisma.element", stats.charisma);
+                                                                                }}
+                                                                            >
+                                                                                {element}
+                                                                            </DropdownMenuItem>
+                                                                        ))}
+                                                                    </DropdownMenuContent>
+                                                                </DropdownMenu>
+                                                            </td>
+                                                            {statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}
+                                                        </tr>
+                                                        <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-3 align-middle border-r font-bold text-primary">ХАРАКТЕРИСТИКИ</td>{statKeys.map(key => (<td key={key} className="p-3 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.finalStat || 0} className="h-9 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-bold text-xl p-0" /></td>))}</tr>
+                                                        <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Другие корректировки</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
+                                                        <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* --- SKILLS --- */}
+                                    <Card className="p-4 relative overflow-hidden">
+                                        <SkillsManager
+                                            form={form}
+                                            level={values.level || 0}
+                                            raceName={values.raceName}
+                                            styleName={values.styleName}
+                                        />
+                                    </Card>
+
+                                    {/* Equipment & Inventory */}
+                                    <Card>
+                                        <CardHeader><CardTitle className="text-sm">Экипировка и Инвентарь</CardTitle></CardHeader>
+                                        <CardContent>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-xs min-w-[700px]">
+                                                    <thead><tr><th className="text-left">Слот/Предмет</th><th className="w-16">Вес</th><th className="w-16">Попад.</th><th className="w-24">Урон</th><th className="w-16">Дальн.</th><th className="w-16">Уклон.</th><th className="w-16">Защита</th><th className="text-left">Примечание</th><th className="w-8"></th></tr></thead>
+                                                    <tbody>
+                                                        {(Object.keys(equipmentSlotLabels) as Array<keyof typeof equipmentSlotLabels>).map((slot) => (
+                                                            <tr key={String(slot)} className="border-b border-muted/50 last:border-0 align-bottom group">
+                                                                <td className="py-2 px-1"><div className="flex flex-col gap-0.5"><span className="text-[10px] text-muted-foreground font-semibold uppercase">{equipmentSlotLabels[slot]}</span><Input {...register(`equipment.${slot}.name`)} className="h-8" /></div></td>
+                                                                <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.weight`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.hit`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1"><div className="flex items-center gap-1"><Input {...register(`equipment.${slot}.damage`)} className="h-8" /><Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button></div></td>
+                                                                <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.range`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.evasion`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1"><Input type="number" {...register(`equipment.${slot}.defense`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1"><Input {...register(`equipment.${slot}.notes`)} className="h-8" /></td>
+                                                                <td className="py-2 px-1">
+                                                                    {values.equipment[slot].name && (
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            className="h-8 w-8 text-muted-foreground hover:text-orange-500"
+                                                                            title="Снять (вернуть в инвентарь)"
+                                                                            onClick={() => {
+                                                                                unequipItem(form, slot as EquipmentSlotKey);
+                                                                                toast.info(`Снято: ${values.equipment[slot].name}`);
+                                                                            }}
+                                                                        >
+                                                                            <ArrowDown className="w-4 h-4" />
+                                                                        </Button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
                                                         ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="mt-6">
+                                                <InventoryManager form={form} />
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Mobile View: Swipeable sections */}
+                        {!isDesktop && (<>
+                            <div className="lg:hidden relative min-h-[500px] overflow-x-hidden pb-12">
+                                <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+                                    <motion.div
+                                        key={activeTab}
+                                        custom={direction}
+                                        variants={slideVariants}
+                                        initial="enter"
+                                        animate="center"
+                                        exit="exit"
+                                        transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
+                                        className="space-y-4 w-full"
+                                    >
+                                        {activeTab === "general" && (
+                                            <>
+                                                <Card>
+                                                    <div className="p-4 grid grid-cols-2 gap-4">
+                                                        <div className="space-y-1 col-span-2">
+                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Имя персонажа</Label>
+                                                            <Input {...register("name")} className="h-9" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Игрок</Label>
+                                                            <Input {...register("playerName")} className="h-9" />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Наставник</Label>
+                                                            <Input {...register("mentor")} className="h-9" />
+                                                        </div>
+                                                        <div className="space-y-1 col-span-2">
+                                                            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Имя Мастера</Label>
+                                                            <Input {...register("masterName")} className="h-9" />
+                                                        </div>
                                                     </div>
-                                                    <div className="space-y-4 pt-4 border-t">
-                                                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Особые проверки</h3>
-                                                        {(['enemyRecognition', 'evaluation'] as const).map(key => (
-                                                            <div key={key} className="space-y-1">
-                                                                <Label className="text-xs">{combatStatLabels[key]}</Label>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
-                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
-                                                                    <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                </Card>
+                                                <Card>
+                                                    <CardHeader><CardTitle className="text-sm">Внешность</CardTitle></CardHeader>
+                                                    <CardContent>
+                                                        <Controller name="image" control={control} render={({ field }) => <ImageUpload value={field.value} onChange={field.onChange} />} />
+                                                        <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                                                            {(['age', 'gender', 'height', 'hairColor', 'eyeColor', 'skinColor'] as const).map(key => (
+                                                                <div key={key} className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">{key === 'age' ? 'Возраст' : key === 'gender' ? 'Пол' : key === 'height' ? 'Рост' : key === 'hairColor' ? 'Цвет волос' : key === 'eyeColor' ? 'Цвет глаз' : 'Цвет кожи'}</Label>
+                                                                    <Input {...register(key)} />
                                                                 </div>
+                                                            ))}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                                <Card>
+                                                    <CardContent className="p-6 space-y-4">
+                                                        <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Жизненный путь</h3>
+                                                        <div className="space-y-3">
+                                                            {(['origin', 'secret', 'future', 'focusItem'] as const).map(key => (
+                                                                <div key={key} className="space-y-1">
+                                                                    <Label className="text-xs">{key === 'origin' ? 'Происхождение' : key === 'secret' ? 'Секрет' : key === 'future' ? 'Будущее' : 'Фокусирующий предмет'}</Label>
+                                                                    <Input {...register(key)} />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            </>
+                                        )}
+
+                                        {activeTab === "combat" && (
+                                            <>
+                                                <Card>
+                                                    <CardHeader><CardTitle className="text-sm">Ресурсы</CardTitle></CardHeader>
+                                                    <CardContent className="space-y-4">
+                                                        {(['hp', 'mp', 'wp'] as const).map((pool) => {
+                                                            const colors: Record<string, string> = {
+                                                                hp: "bg-red-500/80 dark:bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
+                                                                mp: "bg-blue-500/80 dark:bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]",
+                                                                wp: "bg-purple-500/80 dark:bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]",
+                                                            };
+                                                            return (
+                                                                <div key={pool} className="space-y-2">
+                                                                    <div className="flex justify-between text-xs font-bold uppercase"><span>{pool}</span><span>{values[pool]?.current} / {values[pool]?.max}</span></div>
+                                                                    <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} className="h-3" indicatorClassName={colors[pool]} />
+                                                                    <div className="flex gap-2">
+                                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Тек.</Label><Input type="number" {...register(`${pool}.current`)} className="h-8" /></div>
+                                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Макс.</Label><Input type="number" {...register(`${pool}.max`)} className="h-8" /></div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </CardContent>
+                                                </Card>
+                                                <Card>
+                                                    <CardContent className="p-6 space-y-6">
+                                                        <div className="flex justify-center gap-6">
+                                                            <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
+                                                                <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl" />
+                                                                <div className="absolute inset-0 transform -rotate-90">
+                                                                    <svg className="w-full h-full" viewBox="0 0 100 100"><circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" /><circle className="text-primary stroke-current" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 10) * 263.89 }} /></svg>
+                                                                </div>
+                                                                <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
                                                             </div>
-                                                        ))}
+                                                            <div className="flex flex-col justify-center gap-2">
+                                                                <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current < 6) setValue("level", current + 1); }} disabled={(values.level || 0) >= 6}><Plus className="h-3 w-3" /></Button>
+                                                                <Button type="button" variant="outline" size="icon" onClick={() => { const current = values.level || 0; if (current > 0) setValue("level", current - 1); }} disabled={(values.level || 0) <= 0}><Minus className="h-3 w-3" /></Button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2 px-2">
+                                                            <div className="flex justify-between items-baseline">
+                                                                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Опыт (XP)</Label>
+                                                                {(values.exp || 0) >= 10000 && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="default"
+                                                                        className="h-6 text-[10px] px-2 animate-pulse bg-green-600 hover:bg-green-700 text-white shadow-[0_0_10px_rgba(22,163,74,0.5)]"
+                                                                        onClick={() => {
+                                                                            const currentLevel = values.level || 0;
+                                                                            if (currentLevel < 6) {
+                                                                                setValue("level", currentLevel + 1);
+                                                                                setValue("exp", 0);
+                                                                                toast.success(`Уровень повышен! GL: ${currentLevel + 1}`);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <ArrowUpCircle className="w-3 h-3 mr-1" />
+                                                                        Level Up
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                            <div className="relative"><Input type="number" {...register("exp")} className="h-10 text-right font-mono text-lg bg-muted/40 border-muted-foreground/20" /><div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground opacity-50"><div className="w-1.5 h-1.5 rounded-full bg-primary" /></div></div>
+                                                            <div className="h-1 w-full bg-primary/10 rounded-full overflow-hidden"><div className="h-full bg-primary/50 w-full animate-pulse" style={{ width: `${Math.min(((values.exp || 0) / 10000) * 100, 100)}%` }} /></div>
+                                                        </div>
+                                                        <div className="space-y-4">
+                                                            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
+                                                            {(['magicPower', 'evasion', 'defense'] as const).map(key => (
+                                                                <div key={key} className="space-y-1">
+                                                                    <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
+                                                                        <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
+                                                                        <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <div className="space-y-4 pt-4 border-t">
+                                                            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Особые проверки</h3>
+                                                            {(['enemyRecognition', 'evaluation'] as const).map(key => (
+                                                                <div key={key} className="space-y-1">
+                                                                    <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
+                                                                        <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
+                                                                        <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            </>
+                                        )}
+
+                                        {activeTab === "skills" && (
+                                            <Card>
+                                                <CardHeader><CardTitle className="text-sm">Навыки</CardTitle></CardHeader>
+                                                <CardContent>
+                                                    <SkillsManager
+                                                        form={form}
+                                                        isMobile={true}
+                                                        level={values.level || 0}
+                                                        raceName={values.raceName}
+                                                        styleName={values.styleName}
+                                                    />
+                                                </CardContent>
+                                            </Card>
+                                        )}
+
+                                        {activeTab === "stats" && (
+                                            <Card>
+                                                <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
+                                                <CardContent>
+                                                    <div className="overflow-x-auto rounded-md border">
+                                                        <table className="w-full text-sm min-w-[600px]">
+                                                            <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
+                                                            <tbody>
+                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("raceName")} placeholder="Раса" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Бонус (5)</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="border-b"><td className="p-2 border-r font-semibold text-[10px] text-muted-foreground uppercase">База Сумма</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                                <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 border-r font-semibold text-[10px] text-primary uppercase">База / 3</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("styleName")} placeholder="Стиль" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("elementName")} placeholder="Стихия" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="bg-primary/5 dark:bg-primary/10 border-b">
+                                                                    <td className="p-3 border-r font-bold text-primary">ИТОГО</td>
+                                                                    {statKeys.map(key => (<td key={key} className="p-3 text-center font-bold text-xl text-primary">{calculatedStats[key]?.finalStat}</td>))}
+                                                                </tr>
+                                                                <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Коррект.</td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr>
+                                                                    <td className="p-2 border-r">Дайсы</td>
+                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Button variant="ghost" className="w-full h-8 px-0" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat}d</Button></td>))}
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
                                                     </div>
                                                 </CardContent>
                                             </Card>
-                                        </>
-                                    )}
-
-                                    {activeTab === "skills" && (
-                                        <Card>
-                                            <CardHeader><CardTitle className="text-sm">Навыки</CardTitle></CardHeader>
-                                            <CardContent>
-                                                <SkillsManager
-                                                    form={form}
-                                                    isMobile={true}
-                                                    level={values.level || 0}
-                                                    raceName={values.raceName}
-                                                    styleName={values.styleName}
-                                                />
-                                            </CardContent>
-                                        </Card>
-                                    )}
-
-                                    {activeTab === "stats" && (
-                                        <Card>
-                                            <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
-                                            <CardContent>
-                                                <div className="overflow-x-auto rounded-md border">
-                                                    <table className="w-full text-sm min-w-[600px]">
-                                                        <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
-                                                        <tbody>
-                                                            <tr className="border-b"><td className="p-2 border-r"><Input {...register("raceName")} placeholder="Раса" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                            <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Бонус (5)</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                            <tr className="border-b"><td className="p-2 border-r font-semibold text-[10px] text-muted-foreground uppercase">База Сумма</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                            <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 border-r font-semibold text-[10px] text-primary uppercase">База / 3</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                            <tr className="border-b"><td className="p-2 border-r"><Input {...register("styleName")} placeholder="Стиль" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                            <tr className="border-b"><td className="p-2 border-r"><Input {...register("elementName")} placeholder="Стихия" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                            <tr className="bg-primary/5 dark:bg-primary/10 border-b">
-                                                                <td className="p-3 border-r font-bold text-primary">ИТОГО</td>
-                                                                {statKeys.map(key => (<td key={key} className="p-3 text-center font-bold text-xl text-primary">{calculatedStats[key]?.finalStat}</td>))}
-                                                            </tr>
-                                                            <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Коррект.</td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                            <tr>
-                                                                <td className="p-2 border-r">Дайсы</td>
-                                                                {statKeys.map(key => (<td key={key} className="p-2"><Button variant="ghost" className="w-full h-8 px-0" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat}d</Button></td>))}
-                                                            </tr>
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )}
-
-                                    {activeTab === "inventory" && (
-                                        <Card>
-                                            <CardHeader><CardTitle className="text-sm">Экипировка и Инвентарь</CardTitle></CardHeader>
-                                            <CardContent className="space-y-6">
-                                                <div className="space-y-3">
-                                                    <h4 className="font-semibold text-xs uppercase text-muted-foreground">Снаряжение</h4>
-                                                    {(Object.keys(equipmentSlotLabels) as Array<keyof typeof equipmentSlotLabels>).map((slot) => (
-                                                        <div key={String(slot)} className="flex gap-2 items-end">
-                                                            <div className="flex-grow space-y-1"><Label className="text-[10px] uppercase">{equipmentSlotLabels[slot]}</Label><Input {...register(`equipment.${slot}.name`)} className="h-8" /></div>
-                                                            <div className="w-16"><Label className="text-[10px] uppercase">Урон</Label><Input {...register(`equipment.${slot}.damage`)} className="h-8" /></div>
-                                                            <Button size="icon" variant="ghost" className="h-8 w-8 mb-0" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                                <div className="pt-4 border-t space-y-4">
-                                                    <div className="flex justify-between items-center"><Label>Рюкзак</Label><span className="text-xs">Вес: {currentWeight.toFixed(1)}</span></div>
-                                                    {inventory.map((item, index) => (
-                                                        <div key={item.id} className="flex gap-2"><Input {...register(`inventory.${index}.name`)} className="h-8 flex-grow" /><Input type="number" {...register(`inventory.${index}.weight`)} className="h-8 w-16" /><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeInventory(index)}><Trash2 className="w-4 h-4" /></Button></div>
-                                                    ))}
-                                                    <Button variant="outline" size="sm" className="w-full border-dashed" onClick={() => appendInventory({ name: "", weight: 0 })}><PlusCircle className="w-4 h-4 mr-2" /> Добавить</Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    )}
-                                </motion.div>
-                            </AnimatePresence>
-                        </div>
-
-                        {/* Мобильная навигация */}
-                        <nav className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-lg border-t z-50 lg:hidden px-4 py-2 safe-area-pb">
-                            <div className="flex justify-around items-center max-w-md mx-auto">
-                                {[
-                                    { id: "general", label: "Инфо", icon: User },
-                                    { id: "combat", label: "Бой", icon: Sword },
-                                    { id: "skills", label: "Навыки", icon: BookOpen },
-                                    { id: "stats", label: "Хар-ки", icon: FileText },
-                                    { id: "inventory", label: "Вещи", icon: Backpack },
-                                ].map((tab) => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => handleTabChange(tab.id as TabType)}
-                                        className={cn(
-                                            "relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all min-w-[64px] group",
-                                            activeTab === tab.id ? "text-primary" : "text-muted-foreground hover:text-foreground"
                                         )}
-                                    >
-                                        {activeTab === tab.id && (
-                                            <motion.div
-                                                layoutId="activeTabPill"
-                                                className="absolute inset-0 bg-primary/10 rounded-xl"
-                                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                            />
+
+                                        {activeTab === "inventory" && (
+                                            <Card>
+                                                <CardHeader><CardTitle className="text-sm">Экипировка и Инвентарь</CardTitle></CardHeader>
+                                                <CardContent className="space-y-6">
+                                                    <div className="space-y-3">
+                                                        <h4 className="font-semibold text-xs uppercase text-muted-foreground">Снаряжение</h4>
+                                                        {(Object.keys(equipmentSlotLabels) as Array<keyof typeof equipmentSlotLabels>).map((slot) => (
+                                                            <div key={String(slot)} className="flex gap-2 items-end">
+                                                                <div className="flex-grow space-y-1"><Label className="text-[10px] uppercase">{equipmentSlotLabels[slot]}</Label><Input {...register(`equipment.${slot}.name`)} className="h-8" /></div>
+                                                                <div className="w-16"><Label className="text-[10px] uppercase">Урон</Label><Input {...register(`equipment.${slot}.damage`)} className="h-8" /></div>
+                                                                <Button size="icon" variant="ghost" className="h-8 w-8 mb-0" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <div className="pt-4 border-t space-y-4">
+                                                        <InventoryManager form={form} isMobile />
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
                                         )}
-                                        <tab.icon className={cn("w-5 h-5 relative z-10", activeTab === tab.id && "animate-in zoom-in-75 duration-200")} />
-                                        <span className="text-[10px] font-bold uppercase tracking-tight relative z-10">{tab.label}</span>
-                                    </button>
-                                ))}
+                                    </motion.div>
+                                </AnimatePresence>
                             </div>
-                        </nav>
 
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                            {/* Мобильная навигация */}
+                            <nav className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-lg border-t z-50 lg:hidden px-4 py-2 safe-area-pb">
+                                <div className="flex justify-around items-center max-w-md mx-auto">
+                                    {[
+                                        { id: "general", label: "Инфо", icon: User },
+                                        { id: "combat", label: "Бой", icon: Sword },
+                                        { id: "skills", label: "Навыки", icon: BookOpen },
+                                        { id: "stats", label: "Хар-ки", icon: FileText },
+                                        { id: "inventory", label: "Вещи", icon: Backpack },
+                                    ].map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => handleTabChange(tab.id as TabType)}
+                                            className={cn(
+                                                "relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all min-w-[64px] group",
+                                                activeTab === tab.id ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            {activeTab === tab.id && (
+                                                <motion.div
+                                                    layoutId="activeTabPill"
+                                                    className="absolute inset-0 bg-primary/10 rounded-xl"
+                                                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                                                />
+                                            )}
+                                            <tab.icon className={cn("w-5 h-5 relative z-10", activeTab === tab.id && "animate-in zoom-in-75 duration-200")} />
+                                            <span className="text-[10px] font-bold uppercase tracking-tight relative z-10">{tab.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </nav>
+                        </>
+                        )}
+
+                    </div>
+                )
+                }
+            </AnimatePresence >
 
             <DiceModal isOpen={diceState.open} onClose={() => setDiceState(prev => ({ ...prev, open: false }))} notation={diceState.notation} title={diceState.title} />
             <ResetModal
@@ -944,6 +988,6 @@ export default function CharacterSheet() {
                 isOpen={isCreditsModalOpen}
                 onClose={() => setIsCreditsModalOpen(false)}
             />
-        </div>
+        </div >
     );
 }

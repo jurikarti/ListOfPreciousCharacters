@@ -1,15 +1,30 @@
 import { z } from "zod";
 
-// Схема для одного слота экипировки
+// Схема для одного слота экипировки (расширенная, чтобы хранить данные предмета)
 const equipmentSlotSchema = z.object({
+    id: z.string().optional(),
     name: z.string(),
+    type: z.string().optional(),
+    grade: z.coerce.number().optional(),
     weight: z.coerce.number(),
-    hit: z.coerce.number(),
+    effect: z.string().optional(),
+    description: z.string().optional(),
+
+    // Combat Stats
+    hit: z.coerce.number().optional().default(0), // accuracyCheck (numeric or string converted) - schema says number, inventory says string? 
+    // Wait, existing schema had hit as number. Inventory has accuracyCheck as string.
+    // Let's keep existing fields for compatibility but make them optional or cleaner.
+    // Actually, let's keep the existing UI fields as primary, but add the metadata.
+
     damage: z.string(),
-    range: z.coerce.number(),
+    range: z.coerce.number(), // Inventory has range as string (e.g. "0-20"). Equipment schema has number.
     evasion: z.coerce.number(),
     defense: z.coerce.number(),
-    notes: z.string(),
+
+    notes: z.string().optional(),
+
+    // Original Item Data (hidden fields to restore item when unequipping)
+    originalItem: z.any().optional(), // Or specific schema
 });
 
 // Схема для боевого параметра с проверкой
@@ -116,9 +131,21 @@ export const characterSchema = z.object({
 
     // Инвентарь (рюкзак)
     inventory: z.array(z.object({
+        id: z.string(),
         name: z.string(),
+        type: z.string(), // Weapon, Armor, Tool, Consumable, etc.
+        grade: z.coerce.number(),
         weight: z.coerce.number(),
-    })).length(7),
+        effect: z.string(),
+        description: z.string().optional(),
+        // Optional fields for specific items
+        accuracyCheck: z.string().optional(),
+        damage: z.string().optional(),
+        range: z.string().optional(),
+        slot: z.string().optional(),
+        evasion: z.string().optional(),
+        defense: z.string().optional(),
+    })),
     maxWeight: z.coerce.number(),
 
     // Связи
@@ -202,7 +229,7 @@ export const defaultCharacter: CharacterSheetData = {
         magic: { name: "", weight: 0, hit: 0, damage: "", range: 0, evasion: 0, defense: 0, notes: "" },
     },
     enchantments: [],
-    inventory: Array(7).fill({ name: "", weight: 0 }),
+    inventory: [],
     maxWeight: 30,
     connections: [],
     notes: "<p>Заметки о персонаже...</p>",
