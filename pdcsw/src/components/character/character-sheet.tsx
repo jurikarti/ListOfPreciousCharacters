@@ -102,6 +102,11 @@ const ELEMENTS = {
     "Тьма": { body: 0, intellect: 0, mysticism: 0, agility: 0, passion: 1, charisma: 0 },
 } as const;
 
+import { ChangelogModal } from "@/components/changelog-modal";
+import { APP_VERSION, getCurrentChangelog } from "@/lib/changelog";
+
+// ... existing imports ...
+
 export default function CharacterSheet() {
     const [diceState, setDiceState] = useState<{ open: boolean; notation: string; title: string }>({
         open: false,
@@ -117,6 +122,8 @@ export default function CharacterSheet() {
     const [activeTab, setActiveTab] = useState<TabType>("general");
     const [direction, setDirection] = useState(0);
 
+    const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+
     // Fix for duplicate inputs: Check screen size
     const [mounted, setMounted] = useState(false);
     const [isDesktop, setIsDesktop] = useState(true); // Default to true to avoid hydration mismatch flickering if possible, or false.
@@ -126,6 +133,16 @@ export default function CharacterSheet() {
         const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
         checkDesktop();
         window.addEventListener('resize', checkDesktop);
+
+        // Check for updates
+        const currentLog = getCurrentChangelog();
+        const lastVersion = localStorage.getItem("pd_app_version");
+        const lastDate = localStorage.getItem("pd_app_date");
+
+        if (lastVersion !== currentLog.version || lastDate !== currentLog.date) {
+            setIsChangelogOpen(true);
+        }
+
         return () => window.removeEventListener('resize', checkDesktop);
     }, []);
 
@@ -987,6 +1004,16 @@ export default function CharacterSheet() {
             <CreditsModal
                 isOpen={isCreditsModalOpen}
                 onClose={() => setIsCreditsModalOpen(false)}
+            />
+            <ChangelogModal
+                isOpen={isChangelogOpen}
+                entry={getCurrentChangelog()}
+                onClose={() => {
+                    const currentLog = getCurrentChangelog();
+                    localStorage.setItem("pd_app_version", currentLog.version);
+                    localStorage.setItem("pd_app_date", currentLog.date);
+                    setIsChangelogOpen(false);
+                }}
             />
         </div >
     );
