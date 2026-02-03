@@ -1,5 +1,7 @@
 # LoPC (List of Precious Characters)
 
+![Status](https://img.shields.io/badge/Status-Beta-orange) ![License](https://img.shields.io/badge/License-Free-green)
+
 Interactive character sheet for TTRPG "Precious Days", built with Next.js and Tauri.
 
 ## Interface Overview
@@ -22,6 +24,8 @@ The application features a responsive layout designed for both Desktop and Mobil
 - **Theming**: Full support for Light and Dark modes.
 
 ## Development
+
+> **Note**: This repository represents the Web version of the application. You can build it with Tauri, but you need to initialize Tauri in the project manually first.
 
 ### Prerequisites
 
@@ -80,6 +84,8 @@ Generates installers in `src-tauri/target/release/bundle`.
 - **Темы**: Полная поддержка светлой и темной тем.
 
 ## Разработка
+
+> **Примечание**: Этот репозиторий представляет собой Веб-версию приложения. Вы можете собрать его с помощью Tauri, но для этого сначала нужно инициализировать Tauri в проекте вручную.
 
 ### Предварительные требования
 
