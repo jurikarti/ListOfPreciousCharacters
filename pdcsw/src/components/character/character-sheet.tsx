@@ -24,7 +24,7 @@ import { ModeToggle } from "@/components/ui/mode-toggle";
 
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, PanInfo } from "framer-motion";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -154,6 +154,27 @@ export default function CharacterSheet() {
         if (currentIndex === nextIndex) return;
         setDirection(nextIndex > currentIndex ? 1 : -1);
         setActiveTab(newTab);
+    };
+
+    const swipeConfidenceThreshold = 10000;
+    const swipePower = (offset: number, velocity: number) => {
+        return Math.abs(offset) * velocity;
+    };
+
+    const handleDragEnd = (e: any, { offset, velocity }: PanInfo) => {
+        const swipe = swipePower(offset.x, velocity.x);
+
+        if (swipe < -swipeConfidenceThreshold) {
+            const currentIndex = tabs.indexOf(activeTab);
+            if (currentIndex < tabs.length - 1) {
+                handleTabChange(tabs[currentIndex + 1]);
+            }
+        } else if (swipe > swipeConfidenceThreshold) {
+            const currentIndex = tabs.indexOf(activeTab);
+            if (currentIndex > 0) {
+                handleTabChange(tabs[currentIndex - 1]);
+            }
+        }
     };
 
 
@@ -733,6 +754,10 @@ export default function CharacterSheet() {
                                         animate="center"
                                         exit="exit"
                                         transition={{ x: { type: "spring", stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }}
+                                        drag="x"
+                                        dragConstraints={{ left: 0, right: 0 }}
+                                        dragElastic={1}
+                                        onDragEnd={handleDragEnd}
                                         className="space-y-4 w-full"
                                     >
                                         {activeTab === "general" && (
@@ -803,8 +828,34 @@ export default function CharacterSheet() {
                                                                     <div className="flex justify-between text-xs font-bold uppercase"><span>{pool}</span><span>{values[pool]?.current} / {values[pool]?.max}</span></div>
                                                                     <Progress value={(values[pool]?.current / (values[pool]?.max || 1)) * 100} className="h-3" indicatorClassName={colors[pool]} />
                                                                     <div className="flex gap-2">
-                                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Тек.</Label><Input type="number" {...register(`${pool}.current`)} className="h-8" /></div>
-                                                                        <div className="w-1/2 space-y-1"><Label className="text-[10px] text-muted-foreground uppercase">Макс.</Label><Input type="number" {...register(`${pool}.max`)} className="h-8" /></div>
+                                                                        <div className="w-1/2 space-y-1">
+                                                                            <Label className="text-[10px] text-muted-foreground uppercase">Тек.</Label>
+                                                                            <Input type="number" {...register(`${pool}.current`)} className="h-8" />
+                                                                            <div className="flex gap-1 h-8">
+                                                                                <Button type="button" variant="outline" className="flex-1 h-full p-0" onClick={() => {
+                                                                                    const current = Number(getValues(`${pool}.current`)) || 0;
+                                                                                    setValue(`${pool}.current` as any, current - 1);
+                                                                                }}><Minus className="w-4 h-4" /></Button>
+                                                                                <Button type="button" variant="outline" className="flex-1 h-full p-0" onClick={() => {
+                                                                                    const current = Number(getValues(`${pool}.current`)) || 0;
+                                                                                    setValue(`${pool}.current` as any, current + 1);
+                                                                                }}><Plus className="w-4 h-4" /></Button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="w-1/2 space-y-1">
+                                                                            <Label className="text-[10px] text-muted-foreground uppercase">Макс.</Label>
+                                                                            <Input type="number" {...register(`${pool}.max`)} className="h-8" />
+                                                                            <div className="flex gap-1 h-8">
+                                                                                <Button type="button" variant="outline" className="flex-1 h-full p-0" onClick={() => {
+                                                                                    const current = Number(getValues(`${pool}.max`)) || 0;
+                                                                                    setValue(`${pool}.max` as any, current - 1);
+                                                                                }}><Minus className="w-4 h-4" /></Button>
+                                                                                <Button type="button" variant="outline" className="flex-1 h-full p-0" onClick={() => {
+                                                                                    const current = Number(getValues(`${pool}.max`)) || 0;
+                                                                                    setValue(`${pool}.max` as any, current + 1);
+                                                                                }}><Plus className="w-4 h-4" /></Button>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             );
@@ -906,12 +957,90 @@ export default function CharacterSheet() {
                                                         <table className="w-full text-sm min-w-[600px]">
                                                             <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
                                                             <tbody>
-                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("raceName")} placeholder="Раса" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="border-b">
+                                                                    <td className="p-2 border-r">
+                                                                        <DropdownMenu>
+                                                                            <DropdownMenuTrigger asChild>
+                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
+                                                                                    {values.raceName || "Выбрать"}
+                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                                </Button>
+                                                                            </DropdownMenuTrigger>
+                                                                            <DropdownMenuContent align="start" className="w-[180px]">
+                                                                                {Object.keys(RACES).map((race) => (
+                                                                                    <DropdownMenuItem key={race} onClick={() => {
+                                                                                        setValue("raceName", race);
+                                                                                        const stats = RACES[race as keyof typeof RACES];
+                                                                                        setValue("stats.body.race", stats.body);
+                                                                                        setValue("stats.intellect.race", stats.intellect);
+                                                                                        setValue("stats.mysticism.race", stats.mysticism);
+                                                                                        setValue("stats.agility.race", stats.agility);
+                                                                                        setValue("stats.passion.race", stats.passion);
+                                                                                        setValue("stats.charisma.race", stats.charisma);
+                                                                                    }}>{race}</DropdownMenuItem>
+                                                                                ))}
+                                                                            </DropdownMenuContent>
+                                                                        </DropdownMenu>
+                                                                    </td>
+                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                </tr>
                                                                 <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Бонус (5)</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
                                                                 <tr className="border-b"><td className="p-2 border-r font-semibold text-[10px] text-muted-foreground uppercase">База Сумма</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
                                                                 <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 border-r font-semibold text-[10px] text-primary uppercase">База / 3</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("styleName")} placeholder="Стиль" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                                <tr className="border-b"><td className="p-2 border-r"><Input {...register("elementName")} placeholder="Стихия" className="h-8 border-transparent bg-transparent shadow-none" /></td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                <tr className="border-b">
+                                                                    <td className="p-2 border-r">
+                                                                        <DropdownMenu>
+                                                                            <DropdownMenuTrigger asChild>
+                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
+                                                                                    {values.styleName || "Выбрать"}
+                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                                </Button>
+                                                                            </DropdownMenuTrigger>
+                                                                            <DropdownMenuContent align="start" className="w-[180px]">
+                                                                                {Object.keys(STYLES).map((style) => (
+                                                                                    <DropdownMenuItem key={style} onClick={() => {
+                                                                                        setValue("styleName", style);
+                                                                                        const styleData = STYLES[style as keyof typeof STYLES];
+                                                                                        setValue("stats.body.style", styleData.stats.body);
+                                                                                        setValue("stats.intellect.style", styleData.stats.intellect);
+                                                                                        setValue("stats.mysticism.style", styleData.stats.mysticism);
+                                                                                        setValue("stats.agility.style", styleData.stats.agility);
+                                                                                        setValue("stats.passion.style", styleData.stats.passion);
+                                                                                        setValue("stats.charisma.style", styleData.stats.charisma);
+                                                                                    }}>{style}</DropdownMenuItem>
+                                                                                ))}
+                                                                            </DropdownMenuContent>
+                                                                        </DropdownMenu>
+                                                                    </td>
+                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                </tr>
+                                                                <tr className="border-b">
+                                                                    <td className="p-2 border-r">
+                                                                        <DropdownMenu>
+                                                                            <DropdownMenuTrigger asChild>
+                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
+                                                                                    {values.elementName || "Выбрать"}
+                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                                </Button>
+                                                                            </DropdownMenuTrigger>
+                                                                            <DropdownMenuContent align="start" className="w-[180px]">
+                                                                                {Object.keys(ELEMENTS).map((element) => (
+                                                                                    <DropdownMenuItem key={element} onClick={() => {
+                                                                                        setValue("elementName", element);
+                                                                                        const stats = ELEMENTS[element as keyof typeof ELEMENTS];
+                                                                                        setValue("stats.body.element", stats.body);
+                                                                                        setValue("stats.intellect.element", stats.intellect);
+                                                                                        setValue("stats.mysticism.element", stats.mysticism);
+                                                                                        setValue("stats.agility.element", stats.agility);
+                                                                                        setValue("stats.passion.element", stats.passion);
+                                                                                        setValue("stats.charisma.element", stats.charisma);
+                                                                                    }}>{element}</DropdownMenuItem>
+                                                                                ))}
+                                                                            </DropdownMenuContent>
+                                                                        </DropdownMenu>
+                                                                    </td>
+                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                </tr>
                                                                 <tr className="bg-primary/5 dark:bg-primary/10 border-b">
                                                                     <td className="p-3 border-r font-bold text-primary">ИТОГО</td>
                                                                     {statKeys.map(key => (<td key={key} className="p-3 text-center font-bold text-xl text-primary">{calculatedStats[key]?.finalStat}</td>))}
@@ -939,6 +1068,20 @@ export default function CharacterSheet() {
                                                                 <div className="flex-grow space-y-1"><Label className="text-[10px] uppercase">{equipmentSlotLabels[slot]}</Label><Input {...register(`equipment.${slot}.name`)} className="h-8" /></div>
                                                                 <div className="w-16"><Label className="text-[10px] uppercase">Урон</Label><Input {...register(`equipment.${slot}.damage`)} className="h-8" /></div>
                                                                 <Button size="icon" variant="ghost" className="h-8 w-8 mb-0" onClick={() => rollDice(values.equipment[slot].damage, values.equipment[slot].name)}><Dice5 className="w-4 h-4" /></Button>
+                                                                {values.equipment[slot] && values.equipment[slot].name && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                        className="h-8 w-8 mb-0 text-muted-foreground hover:text-orange-500"
+                                                                        onClick={() => {
+                                                                            unequipItem(form, slot as EquipmentSlotKey);
+                                                                            toast.info(`Снято: ${values.equipment[slot].name}`);
+                                                                        }}
+                                                                    >
+                                                                        <ArrowDown className="w-4 h-4" />
+                                                                    </Button>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>

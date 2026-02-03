@@ -22,10 +22,11 @@ export function ResetModal({ isOpen, onClose, onConfirm, onExport }: ResetModalP
     const background = useTransform(x, [0, sliderWidth], ["rgba(239, 68, 68, 0.1)", "rgba(239, 68, 68, 1)"]);
 
     useEffect(() => {
-        if (!isOpen) {
-            setSliderComplete(false);
-            x.set(0);
-        }
+        // Find existing logic was resetting on !isOpen.
+        // We want to ensure it is reset whenever we open it or close it.
+        // Resetting on open ensures that if it was stuck, it gets fixed.
+        setSliderComplete(false);
+        x.set(0);
     }, [isOpen, x]);
 
     const handleDragEnd = () => {
