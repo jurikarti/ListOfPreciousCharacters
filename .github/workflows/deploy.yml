@@ -16,20 +16,25 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            # 1. Загружаем NVM в текущую сессию
+            # Принудительно загружаем NVM
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             
-            # 2. Переключаемся на 20-ю версию Node
-            nvm use 20
+            # Активируем Node 20
+            nvm use 20 || nvm install 20
             
-            # 3. Теперь идем в проект
+            # Теперь идем в проект
             cd /root/ListOfPreciousCharacters/pdcsw
             
-            # 4. Чистим старые хвосты (иногда полезно при смене версий)
-            rm -rf node_modules package-lock.json
+            # Исправляем права на ключ внутри скрипта на всякий случай
+            chmod 600 /root/.ssh/id_ed25519
             
-            # 5. Установка и билд
+            # Обновляем код
             git pull origin tauri-memories-list
+            
+            # Очистка и установка (rm -rf гарантирует, что не будет конфликтов версий)
+            rm -rf node_modules package-lock.json
             npm install
+            
+            # Билд
             npm run build
