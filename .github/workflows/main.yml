@@ -1,0 +1,32 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - tauri-memories-list  # Твоя ветка. Изменения в ней запустят процесс.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Переходим в папку проекта
+            cd /root/ListOfPreciousCharacters/pdcsw
+            
+            # Скачиваем обновления
+            git pull origin tauri-memories-list
+            
+            # Обновляем библиотеки (на случай, если добавил новые)
+            npm install
+            
+            # Собираем проект
+            npm run build
+            
+            # Так как у нас Nginx просто раздает папку 'out', перезапускать ничего не надо!
+            # Nginx сразу начнет отдавать новые файлы.
