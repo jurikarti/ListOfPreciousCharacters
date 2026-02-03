@@ -112,4 +112,4 @@ npm run build
 npm run tauri build
 ```
 Инсталляторы будут созданы в папке `src-tauri/target/release/bundle`.
-  
+   
