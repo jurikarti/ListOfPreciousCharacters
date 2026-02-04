@@ -2,7 +2,7 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Send, Heart } from "lucide-react";
+import { Send, Heart, Github } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -72,7 +72,15 @@ export function CreditsModal({ isOpen, onClose }: CreditsModalProps) {
                             </DialogHeader>
 
                             <div className="mt-8 space-y-4">
-                                <p className="text-xs text-center text-muted-foreground uppercase font-bold tracking-widest">Связаться со мной</p>
+                                <Button
+                                    variant="default"
+                                    className="w-full h-14 text-lg font-bold gap-3 rounded-2xl shadow-[0_4px_20px_rgba(var(--primary),0.3)] hover:shadow-primary/40 transition-all hover:-translate-y-1 active:scale-95 bg-[#0088cc] hover:bg-[#0088cc]/90 text-white border-0"
+                                    onClick={() => window.open("https://t.me/lopcweb", "_blank")}
+                                >
+                                    <Send className="w-6 h-6" />
+                                    Канал
+                                </Button>
+                                <p className="text-xs text-center text-muted-foreground uppercase font-bold tracking-widest">Новости проекта</p>
                                 <Button
                                     variant="default"
                                     className="w-full h-14 text-lg font-bold gap-3 rounded-2xl shadow-[0_4px_20px_rgba(var(--primary),0.3)] hover:shadow-primary/40 transition-all hover:-translate-y-1 active:scale-95 bg-[#0088cc] hover:bg-[#0088cc]/90 text-white border-0"
@@ -81,9 +89,17 @@ export function CreditsModal({ isOpen, onClose }: CreditsModalProps) {
                                     <Send className="w-6 h-6" />
                                     тгшка
                                 </Button>
-                                <p className="text-[10px] text-center text-muted-foreground italic">
-                                    сделано через нейронки кекв
-                                </p>
+                                <p className="text-xs text-center text-muted-foreground uppercase font-bold tracking-widest">Связаться со мной</p>
+
+                                <Button
+                                    variant="default"
+                                    className="w-full h-14 text-lg font-bold gap-3 rounded-2xl shadow-[0_4px_20px_rgba(36,41,46,0.3)] hover:shadow-black/40 transition-all hover:-translate-y-1 active:scale-95 bg-[#24292e] hover:bg-[#24292e]/90 text-white border-0"
+                                    onClick={() => window.open("https://github.com/jurikarti/ListOfPreciousCharacters", "_blank")}
+                                >
+                                    <Github className="w-6 h-6" />
+                                    GitHub
+                                </Button>
+                                <p className="text-xs text-center text-muted-foreground uppercase font-bold tracking-widest">Исходный код</p>
                             </div>
 
                             <div className="mt-8 flex justify-center">

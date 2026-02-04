@@ -19,7 +19,7 @@ import { InventoryManager } from "./inventory-manager";
 import { CreditsModal } from "./credits-modal";
 import { unequipItem, EquipmentSlotKey } from "@/lib/equipment-logic";
 import { toast } from "sonner";
-import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown } from "lucide-react";
+import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown, Users } from "lucide-react";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 
 import { Progress } from "@/components/ui/progress";
@@ -103,6 +103,7 @@ const ELEMENTS = {
 } as const;
 
 import { ChangelogModal } from "@/components/changelog-modal";
+import { PremadeCharacterModal } from "./premade-character-modal";
 import { APP_VERSION, getCurrentChangelog } from "@/lib/changelog";
 
 // ... existing imports ...
@@ -116,6 +117,7 @@ export default function CharacterSheet() {
 
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
+    const [isPremadeModalOpen, setIsPremadeModalOpen] = useState(false);
     const [sheetMode, setSheetMode] = useState<"character" | "memories">("character");
 
     // Tab state for mobile view
@@ -296,6 +298,20 @@ export default function CharacterSheet() {
         return acc;
     }, {} as Record<typeof statKeys[number], { baseSum: number; dividedBy3: number; finalStat: number }>);
 
+    // Helper to evaluate math expression safely (e.g., "10-1" -> 9)
+    const evaluateMath = (str: string): number => {
+        if (!str) return 0;
+        try {
+            // Remove any non-math characters except digits, +, -, *, /, (, )
+            const sanitized = str.replace(/[^0-9+\-*/().]/g, '');
+            if (!sanitized) return 0;
+            // eslint-disable-next-line no-new-func
+            return new Function('return ' + sanitized)();
+        } catch {
+            return 0;
+        }
+    };
+
     if (!mounted) return null;
 
     return (
@@ -324,13 +340,17 @@ export default function CharacterSheet() {
                         </motion.button>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setIsPremadeModalOpen(true)} className="h-8">
+                            <Users className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Готовые Персонажи</span>
+                        </Button>
+
                         <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file')?.click()} className="h-8">
-                            <Upload className="mr-2 h-4 w-4" /> <span className="hidden sm:inline">Импорт</span>
+                            <Upload className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Импорт</span>
                         </Button>
                         <input id="import-file" type="file" accept=".json" className="hidden" onChange={handleImport} />
 
                         <Button variant="outline" size="sm" onClick={handleExport} className="h-8 font-medium">
-                            <Download className="mr-2 h-4 w-4" /> <span className="hidden sm:inline">Экспорт</span>
+                            <Download className="mr-0 sm:mr-2 h-4 w-4" /> <span className="hidden sm:inline">Экспорт</span>
                         </Button>
 
                         <div className="h-8 w-px bg-border mx-1 hidden sm:block" />
@@ -469,15 +489,24 @@ export default function CharacterSheet() {
                                                 <div className="space-y-3">
                                                     {(['magicPower', 'evasion', 'defense'] as const).map(key => {
                                                         const combatStat = values.combat?.[key];
-                                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                                        const base = combatStat?.check || "2d6";
+                                                        const modString = combatStat?.modifier || "";
+
+                                                        // Evaluated modifier value (e.g. "10-1" -> 9)
+                                                        const modValue = evaluateMath(modString);
+
+                                                        // Construct total string: "2d6+9" or "2d6-2"
+                                                        const sign = modValue >= 0 ? "+" : "";
+                                                        const total = `${base}${sign}${modValue}`;
+
                                                         return (
                                                             <div key={key} className="space-y-1">
                                                                 <Label className="text-xs">{combatStatLabels[key]}</Label>
                                                                 <div className="flex items-center gap-2">
                                                                     <div className="relative flex-grow"><Input {...register(`combat.${key}.check`)} className="pr-8" placeholder="2d6" /></div>
                                                                     <span className="text-muted-foreground">+</span>
-                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-16 text-center" placeholder="Mod" />
-                                                                    <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[3rem] justify-center font-mono text-sm border">{total || "—"}</div>
+                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-20 text-center" placeholder="Mod" />
+                                                                    <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[4rem] justify-center font-mono text-sm border">{total}</div>
                                                                     <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
                                                                 </div>
                                                             </div>
@@ -532,14 +561,20 @@ export default function CharacterSheet() {
                                                 <div className="space-y-3">
                                                     {(['enemyRecognition', 'evaluation'] as const).map(key => {
                                                         const combatStat = values.combat?.[key];
-                                                        const total = `${combatStat?.check || ''}${combatStat?.modifier || ''}`;
+                                                        const base = combatStat?.check || "2d6";
+                                                        const modString = combatStat?.modifier || "";
+
+                                                        const modValue = evaluateMath(modString);
+                                                        const sign = modValue >= 0 ? "+" : "";
+                                                        const total = `${base}${sign}${modValue}`;
+
                                                         return (
                                                             <div key={key} className="space-y-1">
                                                                 <Label className="text-xs">{combatStatLabels[key]}</Label>
                                                                 <div className="flex items-center gap-2">
                                                                     <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
                                                                     <span className="text-muted-foreground small">+</span>
-                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="0" />
+                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-20 text-center" placeholder="0" />
                                                                     <Button type="button" size="icon" variant="secondary" className="h-9 w-9 shrink-0" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
                                                                 </div>
                                                             </div>
@@ -868,7 +903,7 @@ export default function CharacterSheet() {
                                                             <div className="relative group w-24 h-24 shrink-0 flex items-center justify-center">
                                                                 <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl" />
                                                                 <div className="absolute inset-0 transform -rotate-90">
-                                                                    <svg className="w-full h-full" viewBox="0 0 100 100"><circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" /><circle className="text-primary stroke-current" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 10) * 263.89 }} /></svg>
+                                                                    <svg className="w-full h-full" viewBox="0 0 100 100"><circle className="text-muted stroke-current" strokeWidth="8" fill="transparent" r="42" cx="50" cy="50" /><circle className="text-primary stroke-current transition-all duration-500 ease-out" strokeWidth="8" strokeLinecap="round" fill="transparent" r="42" cx="50" cy="50" style={{ strokeDasharray: 263.89, strokeDashoffset: 263.89 - ((values.level || 0) / 6) * 263.89 }} /></svg>
                                                                 </div>
                                                                 <div className="relative z-10 flex flex-col items-center justify-center h-full w-full"><span className="text-[0.6rem] font-black uppercase text-muted-foreground absolute top-4">GL</span><span className="text-4xl font-black mt-2">{values.level}</span></div>
                                                             </div>
@@ -905,29 +940,50 @@ export default function CharacterSheet() {
                                                         </div>
                                                         <div className="space-y-4">
                                                             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Боевые параметры</h3>
-                                                            {(['magicPower', 'evasion', 'defense'] as const).map(key => (
-                                                                <div key={key} className="space-y-1">
-                                                                    <Label className="text-xs">{combatStatLabels[key]}</Label>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
-                                                                        <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
-                                                                        <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                            {(['magicPower', 'evasion', 'defense'] as const).map(key => {
+                                                                const combatStat = values.combat?.[key];
+                                                                const base = combatStat?.check || "2d6";
+                                                                const modString = combatStat?.modifier || "";
+
+                                                                // Use evaluateMath identical to Desktop
+                                                                const modValue = evaluateMath(modString);
+                                                                const sign = modValue >= 0 ? "+" : "";
+                                                                const total = `${base}${sign}${modValue}`;
+
+                                                                return (
+                                                                    <div key={key} className="space-y-1">
+                                                                        <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
+                                                                            <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="Mod" />
+                                                                            <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                         <div className="space-y-4 pt-4 border-t">
                                                             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Особые проверки</h3>
-                                                            {(['enemyRecognition', 'evaluation'] as const).map(key => (
-                                                                <div key={key} className="space-y-1">
-                                                                    <Label className="text-xs">{combatStatLabels[key]}</Label>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
-                                                                        <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" />
-                                                                        <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(`${values.combat?.[key]?.check}${values.combat?.[key]?.modifier}`, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                            {(['enemyRecognition', 'evaluation'] as const).map(key => {
+                                                                const combatStat = values.combat?.[key];
+                                                                const base = combatStat?.check || "2d6";
+                                                                const modString = combatStat?.modifier || "";
+
+                                                                const modValue = evaluateMath(modString);
+                                                                const sign = modValue >= 0 ? "+" : "";
+                                                                const total = `${base}${sign}${modValue}`;
+
+                                                                return (
+                                                                    <div key={key} className="space-y-1">
+                                                                        <Label className="text-xs">{combatStatLabels[key]}</Label>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Input {...register(`combat.${key}.check`)} className="flex-grow" placeholder="2d6" />
+                                                                            <Input {...register(`combat.${key}.modifier`)} className="w-14 text-center" placeholder="Mod" />
+                                                                            <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                     </CardContent>
                                                 </Card>
@@ -1134,7 +1190,18 @@ export default function CharacterSheet() {
                 }
             </AnimatePresence >
 
-            <DiceModal isOpen={diceState.open} onClose={() => setDiceState(prev => ({ ...prev, open: false }))} notation={diceState.notation} title={diceState.title} />
+            <DiceModal
+                isOpen={diceState.open}
+                onClose={() => setDiceState(prev => ({ ...prev, open: false }))}
+                notation={diceState.notation}
+                title={diceState.title}
+            />
+
+            <PremadeCharacterModal
+                isOpen={isPremadeModalOpen}
+                onClose={() => setIsPremadeModalOpen(false)}
+                form={form}
+            />
             <ResetModal
                 isOpen={isResetModalOpen}
                 onClose={() => setIsResetModalOpen(false)}
