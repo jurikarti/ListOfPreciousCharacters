@@ -4,6 +4,9 @@
 
 Interactive character sheet for TTRPG "Precious Days", built with Next.js and Tauri.
 
+<img width="2338" height="1267" alt="{358657D3-69A8-4E81-AF6B-DE5070C91DEA}" src="https://github.com/user-attachments/assets/8242c4e4-36d0-4ef5-a473-f907ed8b9d3a" />
+
+
 ## Interface Overview
 
 The application features a responsive layout designed for both Desktop and Mobile use:
