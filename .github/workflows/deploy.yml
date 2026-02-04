@@ -16,24 +16,25 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            # 1. Загружаем NVM в текущую сессию (важно для non-interactive shell)
+            # 1. Загружаем NVM
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            
-            # 2. Переключаемся на 20-ю версию
             nvm use 20
-            
+
             # Переходим в папку проекта
             cd /root/ListOfPreciousCharacters/pdcsw
             
             # Скачиваем обновления
             git pull origin tauri-memories-list
             
-            # 3. Полная очистка перед установкой (нужно сделать один раз после смены версии Node)
-            # Если билд все равно падает, раскомментируй строку ниже:
-            # rm -rf node_modules package-lock.json
+            # 2. КРИТИЧЕСКИЙ ШАГ: Удаляем старые модули и старый lock-файл
+            # Это нужно сделать обязательно из-за смены версии Node
+            rm -rf node_modules package-lock.json
             
-            # Устанавливаем зависимости
+            # 3. Чистим кэш npm на всякий случай
+            npm cache clean --force
+
+            # 4. Ставим всё заново (теперь под Node 20)
             npm install
             
             # Собираем проект
