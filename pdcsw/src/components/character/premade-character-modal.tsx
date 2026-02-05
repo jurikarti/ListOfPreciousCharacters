@@ -32,7 +32,7 @@ const PREMADE_CHARACTERS: PremadeCharacter[] = [
         description: "Магический мечник, наполняющий оружие маной.",
         style: "Enchanter (Зачарователь)",
         race: "Human (Человек)",
-        data: soulInfuser as CharacterSheetData
+        data: soulInfuser as unknown as CharacterSheetData
     },
     {
         id: "magical_conductor",
@@ -40,7 +40,7 @@ const PREMADE_CHARACTERS: PremadeCharacter[] = [
         description: "Эльф-маг, использующий жезл и магию стихий.",
         style: "Caster (Кастер)",
         race: "Elf (Эльф)",
-        data: magicalConductor as CharacterSheetData
+        data: magicalConductor as unknown as CharacterSheetData
     },
     {
         id: "marks_mage",
@@ -48,7 +48,7 @@ const PREMADE_CHARACTERS: PremadeCharacter[] = [
         description: "Ангел-снайпер, специализирующийся на дальнем бое.",
         style: "Shooter (Стрелок)",
         race: "Angel (Ангел)",
-        data: marksMage as CharacterSheetData
+        data: marksMage as unknown as CharacterSheetData
     },
     {
         id: "martial_dancer",
@@ -56,7 +56,7 @@ const PREMADE_CHARACTERS: PremadeCharacter[] = [
         description: "Зверолюд-оборотень, сражающийся усиленным оружием.",
         style: "Shapeshifter (Оборотень)",
         race: "Therian (Зверолюд)",
-        data: martialDancer as CharacterSheetData
+        data: martialDancer as unknown as CharacterSheetData
     }
 ];
 
@@ -85,40 +85,59 @@ export function PremadeCharacterModal({ isOpen, onClose, form }: PremadeCharacte
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent className="sm:max-w-[600px] w-full h-[100dvh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0 sm:p-6 sm:gap-4 overflow-hidden rounded-none sm:rounded-xl">
+                <DialogHeader className="px-4 py-4 sm:px-0 sm:py-0 shrink-0 border-b sm:border-0 bg-background/95 backdrop-blur z-10">
                     <DialogTitle>Загрузить готового персонажа</DialogTitle>
                     <DialogDescription>
                         Выберите шаблон, чтобы начать приключение.
                     </DialogDescription>
                 </DialogHeader>
 
-                <ScrollArea className="flex-1 pr-4">
+                <ScrollArea className="flex-1 min-h-0 px-4 sm:px-0 bg-muted/10">
                     <div className="grid grid-cols-1 gap-4 py-4">
                         {PREMADE_CHARACTERS.map((char) => (
                             <Card
                                 key={char.id}
-                                className={`cursor-pointer transition-all hover:border-primary/50 ${selectedCharId === char.id ? 'border-primary ring-1 ring-primary' : ''}`}
+                                className={`cursor-pointer transition-all hover:border-primary/50 relative overflow-hidden group ${selectedCharId === char.id ? 'border-primary ring-1 ring-primary shadow-md bg-primary/5' : 'border-border/60'}`}
                                 onClick={() => setSelectedCharId(char.id)}
                             >
-                                <CardHeader className="pb-2">
-                                    <div className="flex justify-between items-start">
-                                        <CardTitle className="text-lg">{char.name}</CardTitle>
-                                        <div className="flex gap-2 text-xs">
-                                            <span className="bg-secondary px-2 py-1 rounded-full">{char.race}</span>
-                                            <span className="bg-secondary px-2 py-1 rounded-full">{char.style}</span>
+                                <CardHeader className="pb-3 p-4">
+                                    <div className="flex justify-between items-start gap-2">
+                                        <div className="space-y-1">
+                                            <CardTitle className="text-base sm:text-lg leading-tight">{char.name}</CardTitle>
+                                            <div className="flex flex-wrap gap-1.5 text-[0.65rem] sm:text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                                                <span className="bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{char.race}</span>
+                                                <span className="bg-secondary/50 px-1.5 py-0.5 rounded border border-border/50">{char.style}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <CardDescription>{char.description}</CardDescription>
+                                    <CardDescription className="text-xs sm:text-sm mt-2 line-clamp-3">
+                                        {char.description}
+                                    </CardDescription>
                                 </CardHeader>
+
+                                {selectedCharId === char.id && (
+                                    <div className="absolute top-2 right-2 sm:top-1/2 sm:-translate-y-1/2 sm:right-4 animate-in fade-in zoom-in duration-200">
+                                        <Button
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleLoad();
+                                            }}
+                                            className="shadow-lg h-8 text-xs sm:h-9 sm:text-sm"
+                                        >
+                                            Загрузить
+                                        </Button>
+                                    </div>
+                                )}
                             </Card>
                         ))}
                     </div>
                 </ScrollArea>
 
-                <div className="flex justify-between items-center pt-4 border-t mt-2">
-                    <Button variant="outline" onClick={onClose}>Отмена</Button>
-                    <Button onClick={handleLoad} disabled={!selectedCharId}>Загрузить</Button>
+                <div className="flex justify-between items-center p-4 sm:pt-0 sm:px-0 border-t sm:border-0 bg-background sm:bg-transparent shrink-0 pb-safe">
+                    <Button variant="outline" onClick={onClose} className="w-full sm:w-auto h-10 sm:h-9">Отмена</Button>
+                    <Button onClick={handleLoad} disabled={!selectedCharId} className="w-full sm:w-auto ml-2 sm:ml-0 hidden sm:flex">Загрузить</Button>
                 </div>
             </DialogContent>
         </Dialog>

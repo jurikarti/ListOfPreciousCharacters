@@ -154,8 +154,12 @@ export const characterSchema = z.object({
         relationType: z.string(),
     })),
 
-    // Заметки
-    notes: z.string(),
+    // Заметки (Array structure for multiple notes)
+    notes: z.array(z.object({
+        id: z.string(),
+        title: z.string(),
+        content: z.string(),
+    })).default([]),
 
     // Лист Воспоминаний (Memories Sheet)
     memories: z.array(z.object({
@@ -232,15 +236,8 @@ export const defaultCharacter: CharacterSheetData = {
     inventory: [],
     maxWeight: 30,
     connections: [],
-    notes: "<p>Заметки о персонаже...</p>",
-    memories: Array(15).fill({ date: "", content: "", ascension: false, reward: "" }),
-    growthTable: [
-        { exp: "1000", content: "Получить один навык" },
-        { exp: "3000", content: "Повысить HP и MP." },
-        { exp: "5000", content: "Получить один предмет и один расходник." },
-        { exp: "6000", content: "Получить один навык и один расходник." },
-        { exp: "8000", content: "Получить один навык." },
-        { exp: "10000", content: "Повышение ранга" },
-    ],
+    memories: [],
+    growthTable: [],
+    notes: [],
     experiencePoints: "",
 };
