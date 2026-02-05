@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.2.0";
 
 export interface ChangelogEntry {
     version: string;
@@ -8,15 +8,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG_HISTORY: ChangelogEntry[] = [
     {
-        version: "1.1.0",
-        date: "2026-02-04",
+        version: "1.2.0",
+        date: "2026-02-05",
         changes: [
-            "Добавленны готовые персонажи для быстрого старта.",
-            "Исправлен свайп для удаления листа персонажа",
-            "Добавлены ссылки на соцсети в by jurikarti",
-            "Добавлены анимации броска кубиков",
-            "Чуть чуть подправил интерфейс",
-            "Ссылка на тгк канал проекта в кнопке by jurikarti",
+            "Добавлены заметки",
+            "Форматирование текста в заметках",
+            "На мобильных устройствах добавлен выбор отображения характеристик",
+            "Фиксы багов"
         ]
     }
 ];

@@ -17,6 +17,7 @@ import { MemoriesSheet } from "./memories-sheet";
 import { SkillsManager } from "./skills-manager";
 import { InventoryManager } from "./inventory-manager";
 import { CreditsModal } from "./credits-modal";
+import { NotesSection } from "./notes-section";
 import { unequipItem, EquipmentSlotKey } from "@/lib/equipment-logic";
 import { toast } from "sonner";
 import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown, Users } from "lucide-react";
@@ -125,6 +126,7 @@ export default function CharacterSheet() {
     const [direction, setDirection] = useState(0);
 
     const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+    const [isStatsTableMode, setIsStatsTableMode] = useState(false);
 
     // Fix for duplicate inputs: Check screen size
     const [mounted, setMounted] = useState(false);
@@ -212,6 +214,16 @@ export default function CharacterSheet() {
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
+
+                    // Migration: Convert legacy string notes to array
+                    if (typeof parsed.notes === 'string') {
+                        parsed.notes = parsed.notes ? [{
+                            id: crypto.randomUUID(),
+                            title: "Сохраненные заметки",
+                            content: parsed.notes
+                        }] : [];
+                    }
+
                     const result = characterSchema.safeParse(parsed);
 
                     if (result.success) {
@@ -259,6 +271,16 @@ export default function CharacterSheet() {
         reader.onload = (event) => {
             try {
                 const json = JSON.parse(event.target?.result as string);
+
+                // Migration: Convert legacy string notes to array
+                if (typeof json.notes === 'string') {
+                    json.notes = json.notes ? [{
+                        id: crypto.randomUUID(),
+                        title: "Импортированные заметки",
+                        content: json.notes
+                    }] : [];
+                }
+
                 const result = characterSchema.safeParse(json);
 
                 if (result.success) {
@@ -284,7 +306,10 @@ export default function CharacterSheet() {
             toast.warning("Не указана формула для броска");
             return;
         }
-        const finalNotation = notation.replace(/d\+/gi, 'd6+').replace(/d$/i, 'd6');
+        // Robustly replace 'd' with 'd6' if it's not followed by a digit (implied d6)
+        // This handles "3d", "3d + 5", "d", "d+2" etc.
+        const finalNotation = notation.trim().replace(/d(?![0-9])/gi, 'd6');
+
         setDiceState({ open: true, notation: finalNotation, title: `Проверка: ${title || "Бросок"}` });
     };
 
@@ -466,6 +491,9 @@ export default function CharacterSheet() {
                                             })}
                                         </CardContent>
                                     </Card>
+
+                                    {/* Заметки */}
+                                    <NotesSection control={control} register={register} />
                                 </div>
 
                                 {/* Right Column */}
@@ -711,7 +739,7 @@ export default function CharacterSheet() {
                                                         </tr>
                                                         <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-3 align-middle border-r font-bold text-primary">ХАРАКТЕРИСТИКИ</td>{statKeys.map(key => (<td key={key} className="p-3 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.finalStat || 0} className="h-9 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-bold text-xl p-0" /></td>))}</tr>
                                                         <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Другие корректировки</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
-                                                        <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
+                                                        <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d6`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -844,6 +872,9 @@ export default function CharacterSheet() {
                                                         </div>
                                                     </CardContent>
                                                 </Card>
+
+                                                {/* Заметки (Мобильная версия) */}
+                                                <NotesSection control={control} register={register} />
                                             </>
                                         )}
 
@@ -1006,111 +1037,223 @@ export default function CharacterSheet() {
                                         )}
 
                                         {activeTab === "stats" && (
-                                            <Card>
-                                                <CardHeader><CardTitle className="text-sm">Характеристики</CardTitle></CardHeader>
-                                                <CardContent>
-                                                    <div className="overflow-x-auto rounded-md border">
-                                                        <table className="w-full text-sm min-w-[600px]">
-                                                            <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
-                                                            <tbody>
-                                                                <tr className="border-b">
-                                                                    <td className="p-2 border-r">
-                                                                        <DropdownMenu>
-                                                                            <DropdownMenuTrigger asChild>
-                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
-                                                                                    {values.raceName || "Выбрать"}
-                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                                </Button>
-                                                                            </DropdownMenuTrigger>
-                                                                            <DropdownMenuContent align="start" className="w-[180px]">
-                                                                                {Object.keys(RACES).map((race) => (
-                                                                                    <DropdownMenuItem key={race} onClick={() => {
-                                                                                        setValue("raceName", race);
-                                                                                        const stats = RACES[race as keyof typeof RACES];
-                                                                                        setValue("stats.body.race", stats.body);
-                                                                                        setValue("stats.intellect.race", stats.intellect);
-                                                                                        setValue("stats.mysticism.race", stats.mysticism);
-                                                                                        setValue("stats.agility.race", stats.agility);
-                                                                                        setValue("stats.passion.race", stats.passion);
-                                                                                        setValue("stats.charisma.race", stats.charisma);
-                                                                                    }}>{race}</DropdownMenuItem>
-                                                                                ))}
-                                                                            </DropdownMenuContent>
-                                                                        </DropdownMenu>
-                                                                    </td>
-                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
-                                                                </tr>
-                                                                <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Бонус (5)</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                                <tr className="border-b"><td className="p-2 border-r font-semibold text-[10px] text-muted-foreground uppercase">База Сумма</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                                <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 border-r font-semibold text-[10px] text-primary uppercase">База / 3</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
-                                                                <tr className="border-b">
-                                                                    <td className="p-2 border-r">
-                                                                        <DropdownMenu>
-                                                                            <DropdownMenuTrigger asChild>
-                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
-                                                                                    {values.styleName || "Выбрать"}
-                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                                </Button>
-                                                                            </DropdownMenuTrigger>
-                                                                            <DropdownMenuContent align="start" className="w-[180px]">
-                                                                                {Object.keys(STYLES).map((style) => (
-                                                                                    <DropdownMenuItem key={style} onClick={() => {
-                                                                                        setValue("styleName", style);
-                                                                                        const styleData = STYLES[style as keyof typeof STYLES];
-                                                                                        setValue("stats.body.style", styleData.stats.body);
-                                                                                        setValue("stats.intellect.style", styleData.stats.intellect);
-                                                                                        setValue("stats.mysticism.style", styleData.stats.mysticism);
-                                                                                        setValue("stats.agility.style", styleData.stats.agility);
-                                                                                        setValue("stats.passion.style", styleData.stats.passion);
-                                                                                        setValue("stats.charisma.style", styleData.stats.charisma);
-                                                                                    }}>{style}</DropdownMenuItem>
-                                                                                ))}
-                                                                            </DropdownMenuContent>
-                                                                        </DropdownMenu>
-                                                                    </td>
-                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
-                                                                </tr>
-                                                                <tr className="border-b">
-                                                                    <td className="p-2 border-r">
-                                                                        <DropdownMenu>
-                                                                            <DropdownMenuTrigger asChild>
-                                                                                <Button variant="ghost" className="w-full h-8 justify-between font-normal px-2 border-transparent shadow-none hover:bg-muted/50 p-2 text-xs">
-                                                                                    {values.elementName || "Выбрать"}
-                                                                                    <ChevronDown className="h-3 w-3 opacity-50" />
-                                                                                </Button>
-                                                                            </DropdownMenuTrigger>
-                                                                            <DropdownMenuContent align="start" className="w-[180px]">
-                                                                                {Object.keys(ELEMENTS).map((element) => (
-                                                                                    <DropdownMenuItem key={element} onClick={() => {
-                                                                                        setValue("elementName", element);
-                                                                                        const stats = ELEMENTS[element as keyof typeof ELEMENTS];
-                                                                                        setValue("stats.body.element", stats.body);
-                                                                                        setValue("stats.intellect.element", stats.intellect);
-                                                                                        setValue("stats.mysticism.element", stats.mysticism);
-                                                                                        setValue("stats.agility.element", stats.agility);
-                                                                                        setValue("stats.passion.element", stats.passion);
-                                                                                        setValue("stats.charisma.element", stats.charisma);
-                                                                                    }}>{element}</DropdownMenuItem>
-                                                                                ))}
-                                                                            </DropdownMenuContent>
-                                                                        </DropdownMenu>
-                                                                    </td>
-                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
-                                                                </tr>
-                                                                <tr className="bg-primary/5 dark:bg-primary/10 border-b">
-                                                                    <td className="p-3 border-r font-bold text-primary">ИТОГО</td>
-                                                                    {statKeys.map(key => (<td key={key} className="p-3 text-center font-bold text-xl text-primary">{calculatedStats[key]?.finalStat}</td>))}
-                                                                </tr>
-                                                                <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Коррект.</td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
-                                                                <tr>
-                                                                    <td className="p-2 border-r">Дайсы</td>
-                                                                    {statKeys.map(key => (<td key={key} className="p-2"><Button variant="ghost" className="w-full h-8 px-0" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat}d</Button></td>))}
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-end px-1">
+                                                    <div className="flex items-center gap-2 bg-muted/50 p-1 rounded-lg">
+                                                        <Button
+                                                            variant={!isStatsTableMode ? "secondary" : "ghost"}
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            onClick={() => setIsStatsTableMode(false)}
+                                                        >
+                                                            <Layout className="w-3 h-3 mr-1" />
+                                                            Карточки
+                                                        </Button>
+                                                        <Button
+                                                            variant={isStatsTableMode ? "secondary" : "ghost"}
+                                                            size="sm"
+                                                            className="h-7 text-xs"
+                                                            onClick={() => setIsStatsTableMode(true)}
+                                                        >
+                                                            <ClipboardList className="w-3 h-3 mr-1" />
+                                                            Таблица
+                                                        </Button>
                                                     </div>
-                                                </CardContent>
-                                            </Card>
+                                                </div>
+
+                                                {!isStatsTableMode ? (
+                                                    <div className="space-y-4">
+                                                        {/* Configuration Card */}
+                                                        <Card>
+                                                            <CardHeader className="pb-3"><CardTitle className="text-sm">Настройка персонажа</CardTitle></CardHeader>
+                                                            <CardContent className="grid grid-cols-1 gap-4">
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Раса</Label>
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="outline" className="w-full justify-between font-normal h-9">
+                                                                                {values.raceName || "Выбрать расу"}
+                                                                                <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                                                                            {Object.keys(RACES).map((race) => (
+                                                                                <DropdownMenuItem key={race} onClick={() => {
+                                                                                    setValue("raceName", race);
+                                                                                    const stats = RACES[race as keyof typeof RACES];
+                                                                                    setValue("stats.body.race", stats.body);
+                                                                                    setValue("stats.intellect.race", stats.intellect);
+                                                                                    setValue("stats.mysticism.race", stats.mysticism);
+                                                                                    setValue("stats.agility.race", stats.agility);
+                                                                                    setValue("stats.passion.race", stats.passion);
+                                                                                    setValue("stats.charisma.race", stats.charisma);
+                                                                                }}>{race}</DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Стиль боля</Label>
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="outline" className="w-full justify-between font-normal h-9">
+                                                                                {values.styleName || "Выбрать стиль"}
+                                                                                <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                                                                            {Object.keys(STYLES).map((style) => (
+                                                                                <DropdownMenuItem key={style} onClick={() => {
+                                                                                    setValue("styleName", style);
+                                                                                    const styleData = STYLES[style as keyof typeof STYLES];
+                                                                                    setValue("stats.body.style", styleData.stats.body);
+                                                                                    setValue("stats.intellect.style", styleData.stats.intellect);
+                                                                                    setValue("stats.mysticism.style", styleData.stats.mysticism);
+                                                                                    setValue("stats.agility.style", styleData.stats.agility);
+                                                                                    setValue("stats.passion.style", styleData.stats.passion);
+                                                                                    setValue("stats.charisma.style", styleData.stats.charisma);
+                                                                                    setValue("hp.max", styleData.hp);
+                                                                                    setValue("mp.max", styleData.mp);
+                                                                                    toast.success(`Стиль ${style} выбран! HP/MP обновлены.`);
+                                                                                }}>{style}</DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <Label className="text-xs text-muted-foreground">Стихия</Label>
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <Button variant="outline" className="w-full justify-between font-normal h-9">
+                                                                                {values.elementName || "Выбрать стихию"}
+                                                                                <ChevronDown className="h-3 w-3 opacity-50" />
+                                                                            </Button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                                                                            {Object.keys(ELEMENTS).map((element) => (
+                                                                                <DropdownMenuItem key={element} onClick={() => {
+                                                                                    setValue("elementName", element);
+                                                                                    const stats = ELEMENTS[element as keyof typeof ELEMENTS];
+                                                                                    setValue("stats.body.element", stats.body);
+                                                                                    setValue("stats.intellect.element", stats.intellect);
+                                                                                    setValue("stats.mysticism.element", stats.mysticism);
+                                                                                    setValue("stats.agility.element", stats.agility);
+                                                                                    setValue("stats.passion.element", stats.passion);
+                                                                                    setValue("stats.charisma.element", stats.charisma);
+                                                                                }}>{element}</DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
+                                                            </CardContent>
+                                                        </Card>
+
+                                                        {/* Stats Cards Grid */}
+                                                        <div className="grid grid-cols-1 gap-3">
+                                                            {statKeys.map(key => {
+                                                                const final = calculatedStats[key]?.finalStat || 0;
+                                                                return (
+                                                                    <Card key={key} className="overflow-hidden">
+                                                                        <div className="flex">
+                                                                            {/* Left Side: Summary & Roll */}
+                                                                            <div className="flex flex-col items-center justify-center bg-muted/30 w-24 p-3 border-r">
+                                                                                <span className="text-2xl font-black text-primary">{final}</span>
+                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold text-center leading-tight mb-2">{statLabels[key]}</span>
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    className="h-8 w-full text-xs font-mono gap-1"
+                                                                                    onClick={() => rollDice(`${final}d6`, statLabels[key])}
+                                                                                >
+                                                                                    <Dice5 className="w-3 h-3" />
+                                                                                    {final}d
+                                                                                </Button>
+                                                                            </div>
+
+                                                                            {/* Right Side: Details */}
+                                                                            <div className="flex-1 p-3 space-y-3">
+                                                                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs">
+                                                                                    <div className="text-muted-foreground">База:</div>
+                                                                                    <div className="font-mono text-right">{calculatedStats[key]?.baseSum || 0}</div>
+
+                                                                                    <div className="text-muted-foreground">База ÷ 3:</div>
+                                                                                    <div className="font-mono text-right">{calculatedStats[key]?.dividedBy3 || 0}</div>
+                                                                                </div>
+
+                                                                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                                                                    <div className="space-y-0.5">
+                                                                                        <Label className="text-[10px] text-muted-foreground">Бонус</Label>
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            {...register(`stats.${key}.bonus`)}
+                                                                                            className={`h-7 text-center ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "border-red-500 text-red-500" : ""}`}
+                                                                                        />
+                                                                                    </div>
+                                                                                    <div className="space-y-0.5">
+                                                                                        <Label className="text-[10px] text-muted-foreground">Прочее</Label>
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            {...register(`stats.${key}.other`)}
+                                                                                            className="h-7 text-center"
+                                                                                        />
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </Card>
+                                                                );
+                                                            })}
+
+                                                            <div className={`text-center text-xs font-medium py-2 ${Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0) > 5 ? "text-red-500" : "text-muted-foreground"}`}>
+                                                                Использовано бонусов: {Object.values(values.stats).reduce((acc, stat) => acc + (Number(stat.bonus) || 0), 0)} / 5
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <Card>
+                                                        <CardHeader><CardTitle className="text-sm">Характеристики (Таблица)</CardTitle></CardHeader>
+                                                        <CardContent>
+                                                            <div className="overflow-x-auto rounded-md border">
+                                                                <table className="w-full text-sm min-w-[600px]">
+                                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
+                                                                    <tbody>
+                                                                        <tr className="border-b">
+                                                                            <td className="p-2 border-r">
+                                                                                <div className="text-xs font-medium text-muted-foreground p-2">Раса</div>
+                                                                            </td>
+                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.race`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                        </tr>
+                                                                        <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Бонус (5)</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input type="number" {...register(`stats.${key}.bonus`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                        <tr className="border-b"><td className="p-2 border-r font-semibold text-[10px] text-muted-foreground uppercase">База Сумма</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.baseSum || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                                        <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-2 border-r font-semibold text-[10px] text-primary uppercase">База / 3</td>{statKeys.map(key => (<td key={key} className="p-2 text-center"><Input disabled value={calculatedStats[key]?.dividedBy3 || 0} className="h-8 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-semibold" /></td>))}</tr>
+                                                                        <tr className="border-b">
+                                                                            <td className="p-2 border-r">
+                                                                                <div className="text-xs font-medium text-muted-foreground p-2">Стиль</div>
+                                                                            </td>
+                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.style`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                        </tr>
+                                                                        <tr className="border-b">
+                                                                            <td className="p-2 border-r">
+                                                                                <div className="text-xs font-medium text-muted-foreground p-2">Стихия</div>
+                                                                            </td>
+                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.element`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}
+                                                                        </tr>
+                                                                        <tr className="bg-primary/5 dark:bg-primary/10 border-b">
+                                                                            <td className="p-3 border-r font-bold text-primary">ИТОГО</td>
+                                                                            {statKeys.map(key => (<td key={key} className="p-3 text-center font-bold text-xl text-primary">{calculatedStats[key]?.finalStat}</td>))}
+                                                                        </tr>
+                                                                        <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Коррект.</td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
+                                                                        <tr>
+                                                                            <td className="p-2 border-r">Дайсы</td>
+                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Button variant="ghost" className="w-full h-8 px-0" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat}d</Button></td>))}
+                                                                        </tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                )}
+                                            </div>
                                         )}
 
                                         {activeTab === "inventory" && (
