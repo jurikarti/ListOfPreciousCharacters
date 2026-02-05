@@ -34,7 +34,7 @@ export function NotesSection({ control, register }: NotesSectionProps) {
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-xl flex items-center gap-2">
                         <StickyNote className="w-5 h-5" />
-                        Заметки (Notes)
+                        Заметки
                     </CardTitle>
                     <Button
                         variant="outline"
