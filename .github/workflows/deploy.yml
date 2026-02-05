@@ -24,16 +24,14 @@ jobs:
             # Переходим в папку проекта
             cd /root/ListOfPreciousCharacters/pdcsw
             
-            # Скачиваем обновления
-            git pull origin tauri-memories-list
-            
             # 2. КРИТИЧЕСКИЙ ШАГ: Удаляем старые модули и старый lock-файл
             # Это нужно сделать обязательно из-за смены версии Node
             rm -rf node_modules package-lock.json
             
             # 3. Чистим кэш npm на всякий случай
             npm cache clean --force
-
+            # Скачиваем обновления
+            git pull origin tauri-memories-list
             # 4. Ставим всё заново (теперь под Node 20)
             npm install
             
