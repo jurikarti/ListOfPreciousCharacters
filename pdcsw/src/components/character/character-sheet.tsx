@@ -517,26 +517,89 @@ export default function CharacterSheet() {
                                                 <div className="space-y-3">
                                                     {(['magicPower', 'evasion', 'defense'] as const).map(key => {
                                                         const combatStat = values.combat?.[key];
-                                                        const base = combatStat?.check || "2d6";
+                                                        // const base = combatStat?.check || "2d6"; // Legacy manual input
                                                         const modString = combatStat?.modifier || "";
+                                                        const userModValue = evaluateMath(modString);
 
-                                                        // Evaluated modifier value (e.g. "10-1" -> 9)
-                                                        const modValue = evaluateMath(modString);
+                                                        // Calculate Base & Auto-Mod
+                                                        let autoBase = 0;
+                                                        const stats = calculatedStats;
 
-                                                        // Construct total string: "2d6+9" or "2d6-2"
-                                                        const sign = modValue >= 0 ? "+" : "";
-                                                        const total = `${base}${sign}${modValue}`;
+                                                        // Sum equipment stats
+                                                        // values.equipment is an object: { rightHand: {hit: 0, ...}, ... }
+                                                        const equipStats = Object.values(values.equipment || {}).reduce((acc, item) => ({
+                                                            hit: acc.hit + (Number(item?.hit) || 0),
+                                                            evasion: acc.evasion + (Number(item?.evasion) || 0),
+                                                            defense: acc.defense + (Number(item?.defense) || 0),
+                                                        }), { hit: 0, evasion: 0, defense: 0 });
+
+                                                        if (key === 'magicPower') {
+                                                            const style = values.styleName;
+                                                            if (style === "Энчантер" || style === "Шейпшифтер") {
+                                                                autoBase = stats.body.finalStat + stats.agility.finalStat;
+                                                            } else if (style === "Кастер" || style === "Шутер") {
+                                                                // Shooter is Shooter, Caster is Caster. Assuming Russian names match STYLES keys.
+                                                                autoBase = stats.intellect.finalStat + stats.passion.finalStat;
+                                                            } else if (style === "Сейкрифер" || style === "Мистик") {
+                                                                autoBase = stats.mysticism.finalStat + stats.charisma.finalStat;
+                                                            } else {
+                                                                autoBase = 0;
+                                                            }
+                                                            autoBase += equipStats.hit;
+                                                        } else if (key === 'evasion') {
+                                                            autoBase = stats.mysticism.finalStat + stats.agility.finalStat + 7;
+                                                            autoBase += equipStats.evasion;
+                                                        } else if (key === 'defense') {
+                                                            autoBase = stats.body.finalStat;
+                                                            autoBase += equipStats.defense;
+                                                        }
+
+                                                        const totalVal = autoBase + userModValue;
+                                                        const totalString = key === 'magicPower'
+                                                            ? `2d6+${totalVal}`
+                                                            : `${totalVal}`;
 
                                                         return (
                                                             <div key={key} className="space-y-1">
                                                                 <Label className="text-xs">{combatStatLabels[key]}</Label>
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className="relative flex-grow"><Input {...register(`combat.${key}.check`)} className="pr-8" placeholder="2d6" /></div>
+                                                                    {/* Display Calculated Base + User Mod */}
+
+                                                                    {/* For Magic Power: Show 2d6 + (Base+Mod) */}
+                                                                    {/* For Others: Show Total */}
+
+                                                                    {key === 'magicPower' ? (
+                                                                        <div className="relative flex-grow flex items-center gap-2 text-sm">
+                                                                            <span className="font-mono text-muted-foreground">2d6 + {autoBase}</span>
+                                                                            <span className="text-xs text-muted-foreground">(Авто)</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="relative flex-grow flex items-center gap-2 text-sm">
+                                                                            <span className="font-mono text-muted-foreground">{autoBase}</span>
+                                                                            <span className="text-xs text-muted-foreground">(База)</span>
+                                                                        </div>
+                                                                    )}
+
                                                                     <span className="text-muted-foreground">+</span>
-                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-20 text-center" placeholder="Mod" />
-                                                                    <div className="flex items-center bg-muted rounded-md px-3 h-9 min-w-[4rem] justify-center font-mono text-sm border">{total}</div>
-                                                                    <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(total, combatStatLabels[key])}><Dice5 className="w-4 h-4" /></Button>
+                                                                    <Input {...register(`combat.${key}.modifier`)} className="w-16 text-center h-8" placeholder="Mod" />
+
+                                                                    <div className="flex items-center bg-muted/50 rounded-md px-3 h-9 w-20 justify-center font-mono text-sm border font-bold">
+                                                                        {totalString}
+                                                                    </div>
+
+                                                                    {key === 'magicPower' ? (
+                                                                        <Button type="button" size="icon" variant="ghost" onClick={() => rollDice(totalString, combatStatLabels[key])} className="h-8 w-8 hover:bg-primary/10 hover:text-primary">
+                                                                            <Dice5 className="w-4 h-4" />
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <div className="w-8 h-8" />
+                                                                    )}
                                                                 </div>
+                                                                <p className="text-[10px] text-muted-foreground">
+                                                                    {key === 'magicPower' && "Включает характеристики стиля и меткость оружия."}
+                                                                    {key === 'evasion' && "Мистика + Ловкость + 7 + Уклонение от предметов."}
+                                                                    {key === 'defense' && "Тело + Защита от брони."}
+                                                                </p>
                                                             </div>
                                                         );
                                                     })}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, Search, Backpack, ChevronDown, Info, Sword, Shield, Sparkles, Zap, Hammer, FlaskConical } from "lucide-react";
+import { Plus, Trash2, Search, Backpack, ChevronDown, Info, Sword, Shield, Sparkles, Zap, Hammer, FlaskConical, ArrowLeft, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -18,6 +18,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { ITEMS, Item, ItemType } from "@/lib/game-data";
 import { CharacterSheetData } from "@/lib/schema";
@@ -62,6 +64,63 @@ export function InventoryManager({ form, isMobile }: InventoryManagerProps) {
     const [categoryFilter, setCategoryFilter] = useState<ItemType | "All">("All");
     const [isOpen, setIsOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<CharacterSheetData['inventory'][0] | null>(null);
+
+    // Custom Item State
+    const [isCreatingCustom, setIsCreatingCustom] = useState(false);
+    const [customItem, setCustomItem] = useState<Partial<Item>>({
+        name: "",
+        type: "Weapon",
+        grade: 0,
+        weight: 0,
+        effect: "",
+        description: "",
+        accuracyCheck: "",
+        damage: "",
+        range: "",
+        slot: "",
+        evasion: "",
+        defense: "",
+    });
+
+    const handleCreateCustomItem = () => {
+        if (!customItem.name) {
+            toast.error("Введите название предмета");
+            return;
+        }
+
+        const newItem = {
+            id: generateId(),
+            name: customItem.name,
+            type: customItem.type || "Weapon",
+            grade: Number(customItem.grade) || 0,
+            weight: Number(customItem.weight) || 0,
+            effect: customItem.effect || "",
+            description: customItem.description || "",
+            accuracyCheck: customItem.accuracyCheck,
+            damage: customItem.damage,
+            range: customItem.range,
+            slot: customItem.slot,
+            evasion: customItem.evasion,
+            defense: customItem.defense,
+        } as unknown as Item; // Cast to Item to satisfy type checker if needed, or refine type
+
+        handleAddItem(newItem);
+        setIsCreatingCustom(false);
+        setCustomItem({
+            name: "",
+            type: "Weapon",
+            grade: 0,
+            weight: 0,
+            effect: "",
+            description: "",
+            accuracyCheck: "",
+            damage: "",
+            range: "",
+            slot: "",
+            evasion: "",
+            defense: "",
+        });
+    };
 
     const handleEquip = (index: number, slot: EquipmentSlotKey) => {
         equipItem(form, index, slot);
@@ -136,80 +195,208 @@ export function InventoryManager({ form, isMobile }: InventoryManagerProps) {
                     </DialogTrigger>
                     <DialogContent className="max-w-3xl h-[80vh] flex flex-col p-6 overflow-hidden">
                         <DialogHeader>
-                            <DialogTitle>Добавление предмета</DialogTitle>
+                            <DialogTitle>
+                                {isCreatingCustom ? (
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsCreatingCustom(false)}>
+                                            <ArrowLeft className="h-4 w-4" />
+                                        </Button>
+                                        Создание предмета
+                                    </div>
+                                ) : (
+                                    "Добавление предмета"
+                                )}
+                            </DialogTitle>
                             <DialogDescription>
-                                Выберите предмет из списка.
+                                {isCreatingCustom ? "Заполните параметры нового предмета." : "Выберите предмет из списка или создайте свой."}
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="flex flex-col sm:flex-row gap-2 mb-4 shrink-0">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    type="search"
-                                    placeholder="Поиск..."
-                                    className="pl-8"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-                            </div>
 
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="w-full sm:w-[200px] justify-between">
-                                        {CATEGORIES.find(c => c.value === categoryFilter)?.label || categoryFilter}
-                                        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                        {isCreatingCustom ? (
+                            <ScrollArea className="flex-1 -mr-6 pr-6 h-full">
+                                <div className="space-y-4 pb-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Название</Label>
+                                            <Input
+                                                value={customItem.name}
+                                                onChange={(e) => setCustomItem({ ...customItem, name: e.target.value })}
+                                                placeholder="Например: Меч Тысячи Истин"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Тип</Label>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" className="w-full justify-between">
+                                                        {CATEGORIES.find(c => c.value === customItem.type)?.label || customItem.type}
+                                                        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="w-[200px]">
+                                                    {CATEGORIES.filter(c => c.value !== "All").map(cat => (
+                                                        <DropdownMenuItem key={cat.value} onClick={() => setCustomItem({ ...customItem, type: cat.value as ItemType })}>
+                                                            {cat.label}
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Grade (Ранг)</Label>
+                                            <Input
+                                                type="number"
+                                                value={customItem.grade}
+                                                onChange={(e) => setCustomItem({ ...customItem, grade: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Вес</Label>
+                                            <Input
+                                                type="number"
+                                                value={customItem.weight}
+                                                onChange={(e) => setCustomItem({ ...customItem, weight: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className="space-y-2 col-span-2">
+                                            <Label>Слот (если есть)</Label>
+                                            <Input
+                                                value={customItem.slot || ""}
+                                                onChange={(e) => setCustomItem({ ...customItem, slot: e.target.value })}
+                                                placeholder="Например: Одна рука"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Боевые параметры (Опционально)</Label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-muted/20 p-4 rounded-md">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Урон</Label>
+                                                <Input className="h-8 text-sm" placeholder="+2D" value={customItem.damage || ""} onChange={(e) => setCustomItem({ ...customItem, damage: e.target.value })} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Защита</Label>
+                                                <Input className="h-8 text-sm" placeholder="+2" value={customItem.defense || ""} onChange={(e) => setCustomItem({ ...customItem, defense: e.target.value })} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Меткость</Label>
+                                                <Input className="h-8 text-sm" placeholder="+1" value={customItem.accuracyCheck || ""} onChange={(e) => setCustomItem({ ...customItem, accuracyCheck: e.target.value })} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Уклонение</Label>
+                                                <Input className="h-8 text-sm" placeholder="-1" value={customItem.evasion || ""} onChange={(e) => setCustomItem({ ...customItem, evasion: e.target.value })} />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Дальность</Label>
+                                                <Input className="h-8 text-sm" placeholder="В упор" value={customItem.range || ""} onChange={(e) => setCustomItem({ ...customItem, range: e.target.value })} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Эффект</Label>
+                                        <Textarea
+                                            value={customItem.effect || ""}
+                                            onChange={(e) => setCustomItem({ ...customItem, effect: e.target.value })}
+                                            placeholder="Описание механического эффекта..."
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Описание (Художественное)</Label>
+                                        <Textarea
+                                            value={customItem.description || ""}
+                                            onChange={(e) => setCustomItem({ ...customItem, description: e.target.value })}
+                                            placeholder="История предмета..."
+                                        />
+                                    </div>
+
+                                    <Button className="w-full mt-4 gap-2" onClick={handleCreateCustomItem}>
+                                        <Save className="w-4 h-4" /> Создать предмет
                                     </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    {CATEGORIES.map(cat => (
-                                        <DropdownMenuItem key={cat.value} onClick={() => setCategoryFilter(cat.value)}>
-                                            {cat.label}
-                                        </DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                        <ScrollArea className="flex-1 -mr-6 pr-6 h-full">
-                            <div className="grid grid-cols-1 gap-4 pb-12">
-                                {filteredAvailableItems.map((item) => (
-                                    <Card
-                                        key={item.id}
-                                        className={cn(
-                                            "p-3 flex flex-col gap-2 transition-colors cursor-pointer border-l-4",
-                                            getItemColor(item.type)
-                                        )}
-                                        onClick={() => handleAddItem(item)}
-                                    >
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex flex-col gap-1">
-                                                <div className="font-bold flex items-center gap-2">
-                                                    {item.name}
-                                                    {item.grade > 0 && <Badge variant="secondary" className="text-[10px] h-5">Grade {item.grade}</Badge>}
+                                </div>
+                            </ScrollArea>
+                        ) : (
+                            <>
+                                <div className="flex flex-col sm:flex-row gap-2 mb-4 shrink-0">
+                                    <div className="relative flex-1">
+                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            type="search"
+                                            placeholder="Поиск..."
+                                            className="pl-8"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="outline" className="w-full sm:w-[200px] justify-between">
+                                                {CATEGORIES.find(c => c.value === categoryFilter)?.label || categoryFilter}
+                                                <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            {CATEGORIES.map(cat => (
+                                                <DropdownMenuItem key={cat.value} onClick={() => setCategoryFilter(cat.value)}>
+                                                    {cat.label}
+                                                </DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                                <Button variant="outline" className="w-full mb-4 gap-2" onClick={() => setIsCreatingCustom(true)}>
+                                    <Plus className="w-4 h-4" /> Создать свой предмет
+                                </Button>
+                                <ScrollArea className="flex-1 -mr-6 pr-6 h-full">
+                                    <div className="grid grid-cols-1 gap-4 pb-12">
+                                        {filteredAvailableItems.map((item) => (
+                                            <Card
+                                                key={item.id}
+                                                className={cn(
+                                                    "p-3 flex flex-col gap-2 transition-colors cursor-pointer border-l-4",
+                                                    getItemColor(item.type)
+                                                )}
+                                                onClick={() => handleAddItem(item)}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="font-bold flex items-center gap-2">
+                                                            {item.name}
+                                                            {item.grade > 0 && <Badge variant="secondary" className="text-[10px] h-5">Grade {item.grade}</Badge>}
+                                                        </div>
+                                                        <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
+                                                            <Badge variant="outline">{item.type}</Badge>
+                                                            {item.weight !== undefined && <Badge variant="outline">Вес: {item.weight}</Badge>}
+                                                            {item.slot && <Badge variant="secondary">{item.slot}</Badge>}
+                                                        </div>
+                                                    </div>
+                                                    <Button size="sm" variant="ghost" className="h-6">Добавить</Button>
                                                 </div>
-                                                <div className="flex gap-2 text-xs text-muted-foreground flex-wrap">
-                                                    <Badge variant="outline">{item.type}</Badge>
-                                                    {item.weight !== undefined && <Badge variant="outline">Вес: {item.weight}</Badge>}
-                                                    {item.slot && <Badge variant="secondary">{item.slot}</Badge>}
+                                                <div className="text-sm pt-1">
+                                                    {item.effect}
                                                 </div>
-                                            </div>
-                                            <Button size="sm" variant="ghost" className="h-6">Добавить</Button>
-                                        </div>
-                                        <div className="text-sm pt-1">
-                                            {item.effect}
-                                        </div>
-                                        {/* Display specific stats if they exist */}
-                                        {(item.damage || item.defense) && (
-                                            <div className="flex gap-2 mt-1 text-xs font-mono bg-muted/30 p-1 rounded w-fit">
-                                                {item.accuracyCheck && <span>Меткость: {item.accuracyCheck}</span>}
-                                                {item.damage && <span>Урон: {item.damage}</span>}
-                                                {item.defense && <span>Защита: {item.defense}</span>}
-                                                {item.evasion && <span>Уворот: {item.evasion}</span>}
-                                            </div>
-                                        )}
-                                    </Card>
-                                ))}
-                            </div>
-                        </ScrollArea>
+                                                {/* Display specific stats if they exist */}
+                                                {(item.damage || item.defense) && (
+                                                    <div className="flex gap-2 mt-1 text-xs font-mono bg-muted/30 p-1 rounded w-fit">
+                                                        {item.accuracyCheck && <span>Меткость: {item.accuracyCheck}</span>}
+                                                        {item.damage && <span>Урон: {item.damage}</span>}
+                                                        {item.defense && <span>Защита: {item.defense}</span>}
+                                                        {item.evasion && <span>Уворот: {item.evasion}</span>}
+                                                    </div>
+                                                )}
+                                            </Card>
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+
+                            </>
+                        )}
                     </DialogContent>
                 </Dialog>
             </div>
@@ -367,6 +554,6 @@ export function InventoryManager({ form, isMobile }: InventoryManagerProps) {
                     </div>
                 </DialogContent>
             </Dialog>
-        </div>
+        </div >
     );
 }

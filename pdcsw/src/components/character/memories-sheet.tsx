@@ -31,10 +31,10 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
         name: "memories",
     });
 
-    const { fields: growthFields } = useFieldArray({
-        control,
-        name: "growthTable",
-    });
+    // const { fields: growthFields } = useFieldArray({
+    //     control,
+    //     name: "growthTable",
+    // });
 
     const tabs: MemoryTabType[] = ["profile", "memories", "growth"];
     const handleTabChange = (tab: MemoryTabType) => {
@@ -199,16 +199,30 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-muted/50">
-                                    {growthFields.map((field, index) => (
-                                        <tr key={field.id}>
-                                            <td className="p-2">
-                                                <Input {...register(`growthTable.${index}.exp`)} className="h-8 border-transparent hover:border-input focus:border-input bg-transparent font-mono text-[11px]" />
-                                            </td>
-                                            <td className="p-2">
-                                                <Input {...register(`growthTable.${index}.content`)} className="h-8 border-transparent hover:border-input focus:border-input bg-transparent" />
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">1000</td>
+                                        <td className="p-2 text-[11px]">Получить один Навык.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">3000</td>
+                                        <td className="p-2 text-[11px]">Увеличить HP и MP. Применить значения роста HP и MP из таблицы модификаторов Стиля.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">5000</td>
+                                        <td className="p-2 text-[11px]">Получить один Предмет и Расходный материал.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">6000</td>
+                                        <td className="p-2 text-[11px]">Получить один Навык и Расходный материал.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">8000</td>
+                                        <td className="p-2 text-[11px]">Получить один Навык.</td>
+                                    </tr>
+                                    <tr>
+                                        <td className="p-2 text-center font-mono text-[11px] font-bold">10000</td>
+                                        <td className="p-2 text-[11px]">Провести Повышение Грейда (Grade Up).</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </CardContent>
@@ -417,18 +431,30 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
                                     </CardHeader>
                                     <CardContent className="p-0">
                                         <div className="divide-y divide-muted/50">
-                                            {growthFields.map((field, index) => (
-                                                <div key={field.id} className="p-4 flex gap-4 items-center">
-                                                    <div className="w-16 shrink-0">
-                                                        <Label className="text-[9px] uppercase font-bold text-muted-foreground block mb-1">XP</Label>
-                                                        <Input {...register(`growthTable.${index}.exp`)} className="h-8 text-center px-1 font-mono text-[11px]" />
-                                                    </div>
-                                                    <div className="flex-grow">
-                                                        <Label className="text-[9px] uppercase font-bold text-muted-foreground block mb-1">Результат</Label>
-                                                        <Input {...register(`growthTable.${index}.content`)} className="h-8 text-xs" />
-                                                    </div>
-                                                </div>
-                                            ))}
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">1000</div>
+                                                <div className="flex-grow text-xs text-foreground">Получить один Навык.</div>
+                                            </div>
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">3000</div>
+                                                <div className="flex-grow text-xs text-foreground">Увеличить HP и MP. Применить значения роста HP и MP из таблицы модификаторов Стиля.</div>
+                                            </div>
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">5000</div>
+                                                <div className="flex-grow text-xs text-foreground">Получить один Предмет и Расходный материал.</div>
+                                            </div>
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">6000</div>
+                                                <div className="flex-grow text-xs text-foreground">Получить один Навык и Расходный материал.</div>
+                                            </div>
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">8000</div>
+                                                <div className="flex-grow text-xs text-foreground">Получить один Навык.</div>
+                                            </div>
+                                            <div className="p-3 flex gap-4 items-center">
+                                                <div className="w-16 shrink-0 text-center font-mono text-[11px] font-bold text-foreground">10000</div>
+                                                <div className="flex-grow text-xs text-foreground">Провести Повышение Грейда (Grade Up).</div>
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>

@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Plus, Trash2, Search, BookOpen, Lock, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Search, BookOpen, Lock, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -97,6 +97,30 @@ export function SkillsManager({ form, isMobile, level, raceName, styleName }: Sk
     }).sort((a, b) => {
         return a.requirements.gl - b.requirements.gl;
     });
+
+    const handleUseSkill = (e: React.MouseEvent, skill: CharacterSheetData['skills'][0]) => {
+        e.stopPropagation();
+
+        // Extract MP cost
+        const costStr = skill.cost || "";
+        const mpMatch = costStr.match(/(\d+)\s*MP/i);
+
+        if (!mpMatch) {
+            toast.info(`Навык "${skill.name}" не требует MP для использования.`);
+            return;
+        }
+
+        const cost = parseInt(mpMatch[1], 10);
+        const currentMP = form.getValues("mp.current");
+
+        if (currentMP < cost) {
+            toast.error(`Недостаточно MP! Требуется: ${cost}, Текущее: ${currentMP}`);
+            return;
+        }
+
+        form.setValue("mp.current", currentMP - cost);
+        toast.success(`Использован навык "${skill.name}". Потрачено ${cost} MP.`);
+    };
 
     return (
         <div className="space-y-4 h-full flex flex-col">
@@ -226,10 +250,11 @@ export function SkillsManager({ form, isMobile, level, raceName, styleName }: Sk
                 {/* Desktop Table View */}
                 <div className="w-full text-sm">
                     {!isMobile && (
-                        <div className="grid grid-cols-[2fr_100px_3fr_40px] gap-4 p-3 bg-muted/40 font-medium border-b text-muted-foreground uppercase text-xs">
+                        <div className="grid grid-cols-[2fr_100px_3fr_110px_40px] gap-4 p-3 bg-muted/40 font-medium border-b text-muted-foreground uppercase text-xs items-center">
                             <div>Название навыка</div>
                             <div className="text-center">Стоимость</div>
                             <div>Эффект</div>
+                            <div className="text-right">Действие</div>
                             <div></div>
                         </div>
                     )}
@@ -243,12 +268,14 @@ export function SkillsManager({ form, isMobile, level, raceName, styleName }: Sk
                                     dbSkill?.requirements.style ? `Стиль: ${dbSkill.requirements.style}` :
                                         "Общий";
 
+                                const hasMpCost = (skill.cost || "").toUpperCase().includes("MP");
+
                                 return (
                                     <div
                                         key={index}
                                         className={cn(
                                             "group hover:bg-muted/30 transition-colors cursor-pointer",
-                                            isMobile ? "flex flex-col gap-2 p-4 border-b last:border-0" : "grid grid-cols-[2fr_100px_3fr_40px] gap-4 p-3 items-center",
+                                            isMobile ? "flex flex-col gap-2 p-4 border-b last:border-0" : "grid grid-cols-[2fr_100px_3fr_110px_40px] gap-4 p-3 items-center",
                                             // Apply color stripe if dbSkill is found
                                             isMobile && dbSkill ? cn("border-l-4", getSkillColor(dbSkill).replace("border-l-", "border-l-")) : ""
                                         )}
@@ -280,20 +307,67 @@ export function SkillsManager({ form, isMobile, level, raceName, styleName }: Sk
                                             {skill.effect}
                                         </div>
 
-                                        <div className="flex justify-end">
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                className={cn(
-                                                    "h-8 w-8 text-muted-foreground hover:text-destructive transition-opacity",
-                                                    isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                        {/* Use Button (Desktop) */}
+                                        {!isMobile && (
+                                            <div className="flex justify-end pr-2">
+                                                {hasMpCost && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-7 text-xs px-3 gap-1.5 border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-900 hover:border-purple-300 transition-all shadow-sm font-semibold"
+                                                        onClick={(e) => handleUseSkill(e, skill)}
+                                                    >
+                                                        <Zap className="w-3.5 h-3.5" />
+                                                        Каст
+                                                    </Button>
                                                 )}
-                                                onClick={(e) => handleRemoveSkill(e, index)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
+                                            </div>
+                                        )}
+
+                                        {/* Mobile Use Button & Trash */}
+                                        {isMobile && (
+                                            <div className="flex justify-between items-center mt-2 border-t pt-2">
+                                                <div>
+                                                    {hasMpCost && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-8 text-xs px-3 gap-1.5 border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-900 transition-all font-semibold"
+                                                            onClick={(e) => handleUseSkill(e, skill)}
+                                                        >
+                                                            <Zap className="w-3.5 h-3.5" />
+                                                            Каст
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                                    onClick={(e) => handleRemoveSkill(e, index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {!isMobile && (
+                                            <div className="flex justify-end">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className={cn(
+                                                        "h-8 w-8 text-muted-foreground hover:text-destructive transition-opacity",
+                                                        "opacity-0 group-hover:opacity-100"
+                                                    )}
+                                                    onClick={(e) => handleRemoveSkill(e, index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
