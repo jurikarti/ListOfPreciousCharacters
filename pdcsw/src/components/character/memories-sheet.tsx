@@ -12,18 +12,19 @@ import { ImageUpload } from "./image-upload";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { User, ScrollText, TrendingUp, Trash2, PlusCircle } from "lucide-react";
+import { User, ScrollText, TrendingUp, Trash2, PlusCircle, BookOpen } from "lucide-react";
 
 interface MemoriesSheetProps {
     register: UseFormRegister<CharacterSheetData>;
     control: Control<CharacterSheetData>;
     values: CharacterSheetData;
     rollDice: (notation: string, title?: string) => void;
+    onOpenTables?: () => void;
 }
 
 type MemoryTabType = "profile" | "memories" | "growth";
 
-export function MemoriesSheet({ register, control, values, rollDice }: MemoriesSheetProps) {
+export function MemoriesSheet({ register, control, values, rollDice, onOpenTables }: MemoriesSheetProps) {
     const [activeTab, setActiveTab] = useState<MemoryTabType>("profile");
 
     const { fields: memoryFields, append: appendMemory, remove: removeMemory } = useFieldArray({
@@ -69,6 +70,23 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
                                     <Input {...register("gender")} className="h-7 text-xs" />
                                 </div>
                             </div>
+                            {onOpenTables && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        console.log("Opening tables modal");
+                                        onOpenTables();
+                                    }}
+                                    className="w-full mt-4 text-xs"
+                                >
+                                    <BookOpen className="w-3 h-3 mr-2" />
+                                    Справочные Таблицы
+                                </Button>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -114,8 +132,9 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
 
                 {/* Memories Table */}
                 <Card className="border-2">
-                    <CardHeader className="bg-muted/30 border-b py-3">
+                    <CardHeader className="bg-muted/30 border-b py-3 flex flex-row items-center justify-between">
                         <CardTitle className="text-sm font-bold uppercase tracking-wider text-center">Таблица Воспоминаний</CardTitle>
+                        {/* Button removed */}
                     </CardHeader>
                     <CardContent className="p-0 overflow-x-auto">
                         <table className="w-full text-xs min-w-[600px]">
@@ -296,6 +315,22 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
                                                 <Input {...register("gender")} className="h-9" />
                                             </div>
                                         </div>
+                                        {onOpenTables && (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    onOpenTables();
+                                                }}
+                                                className="w-full mt-4 text-xs"
+                                            >
+                                                <BookOpen className="w-3 h-3 mr-2" />
+                                                Справочные Таблицы
+                                            </Button>
+                                        )}
                                     </CardContent>
                                 </Card>
 
@@ -341,8 +376,9 @@ export function MemoriesSheet({ register, control, values, rollDice }: MemoriesS
 
                         {activeTab === "memories" && (
                             <Card className="border-2">
-                                <CardHeader className="bg-muted/30 border-b py-3">
+                                <CardHeader className="bg-muted/30 border-b py-3 flex flex-row items-center justify-between">
                                     <CardTitle className="text-sm font-bold uppercase tracking-wider text-center">Воспоминания</CardTitle>
+                                    {/* Button removed */}
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     <div className="divide-y divide-muted/50">

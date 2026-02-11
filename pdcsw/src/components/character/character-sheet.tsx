@@ -20,7 +20,7 @@ import { CreditsModal } from "./credits-modal";
 import { NotesSection } from "./notes-section";
 import { unequipItem, EquipmentSlotKey } from "@/lib/equipment-logic";
 import { toast } from "sonner";
-import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown, Users } from "lucide-react";
+import { Download, Upload, Dice5, Save, PlusCircle, Trash2, Minus, Plus, User, Sword, FileText, Backpack, RefreshCcw, Layout, ClipboardList, ArrowUpCircle, ChevronDown, BookOpen, ArrowDown, Users, Activity, Brain, Sparkles, Wind, Flame, Crown } from "lucide-react";
 import { ModeToggle } from "@/components/ui/mode-toggle";
 
 import { Progress } from "@/components/ui/progress";
@@ -59,6 +59,15 @@ const statLabels: Record<typeof statKeys[number], string> = {
     agility: "Ловкость",
     passion: "Страсть / пыл",
     charisma: "Харизма"
+};
+
+const statIcons: Record<typeof statKeys[number], React.ReactNode> = {
+    body: <Activity className="w-5 h-5 text-red-500" />,
+    intellect: <Brain className="w-5 h-5 text-blue-500" />,
+    mysticism: <Sparkles className="w-5 h-5 text-purple-500" />,
+    agility: <Wind className="w-5 h-5 text-cyan-500" />,
+    passion: <Flame className="w-5 h-5 text-orange-500" />,
+    charisma: <Crown className="w-5 h-5 text-yellow-500" />
 };
 
 const combatStatLabels: Record<keyof Omit<CharacterSheetData['combat'], 'baseDamage'>, string> = {
@@ -103,9 +112,19 @@ const ELEMENTS = {
     "Тьма": { body: 0, intellect: 0, mysticism: 0, agility: 0, passion: 1, charisma: 0 },
 } as const;
 
+const STAT_COLORS = {
+    body: "text-red-500 border-red-500/20 bg-red-500/10",
+    intellect: "text-blue-500 border-blue-500/20 bg-blue-500/10",
+    mysticism: "text-purple-500 border-purple-500/20 bg-purple-500/10",
+    agility: "text-green-500 border-green-500/20 bg-green-500/10",
+    passion: "text-pink-500 border-pink-500/20 bg-pink-500/10",
+    charisma: "text-yellow-500 border-yellow-500/20 bg-yellow-500/10",
+} as const;
+
 import { ChangelogModal } from "@/components/changelog-modal";
 import { PremadeCharacterModal } from "./premade-character-modal";
 import { APP_VERSION, getCurrentChangelog } from "@/lib/changelog";
+import { MemoriesTablesModal } from "./memories-tables-modal";
 
 // ... existing imports ...
 
@@ -126,6 +145,7 @@ export default function CharacterSheet() {
     const [direction, setDirection] = useState(0);
 
     const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+    const [isMemoriesModalOpen, setIsMemoriesModalOpen] = useState(false);
     const [isStatsTableMode, setIsStatsTableMode] = useState(false);
 
     // Fix for duplicate inputs: Check screen size
@@ -240,6 +260,46 @@ export default function CharacterSheet() {
             }
         }
     }, [reset]);
+
+    // Auto-apply Race Base Stats
+    useEffect(() => {
+        const raceName = values.raceName;
+        if (!raceName || !RACES[raceName as keyof typeof RACES]) return;
+
+        const raceStats = RACES[raceName as keyof typeof RACES];
+        statKeys.forEach(key => {
+            // Only update if different to avoid infinite loops
+            if (Number(values.stats?.[key]?.race) !== raceStats[key]) {
+                setValue(`stats.${key}.race`, raceStats[key]);
+            }
+        });
+    }, [values.raceName, setValue]);
+
+    // Auto-apply Style Modifiers
+    useEffect(() => {
+        const styleName = values.styleName;
+        if (!styleName || !STYLES[styleName as keyof typeof STYLES]) return;
+
+        const styleModifier = STYLES[styleName as keyof typeof STYLES].stats;
+        statKeys.forEach(key => {
+            if (Number(values.stats?.[key]?.style) !== styleModifier[key]) {
+                setValue(`stats.${key}.style`, styleModifier[key]);
+            }
+        });
+    }, [values.styleName, setValue]);
+
+    // Auto-apply Element Modifiers
+    useEffect(() => {
+        const elementName = values.elementName;
+        if (!elementName || !ELEMENTS[elementName as keyof typeof ELEMENTS]) return;
+
+        const elementModifier = ELEMENTS[elementName as keyof typeof ELEMENTS];
+        statKeys.forEach(key => {
+            if (Number(values.stats?.[key]?.element) !== elementModifier[key]) {
+                setValue(`stats.${key}.element`, elementModifier[key]);
+            }
+        });
+    }, [values.elementName, setValue]);
 
     useEffect(() => {
         const subscription = watch((value) => {
@@ -442,7 +502,13 @@ export default function CharacterSheet() {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3 }}
                     >
-                        <MemoriesSheet register={register} control={control} values={values} rollDice={rollDice} />
+                        <MemoriesSheet
+                            register={register}
+                            control={control}
+                            values={values}
+                            rollDice={rollDice}
+                            onOpenTables={() => setIsMemoriesModalOpen(true)}
+                        />
                     </motion.div>
                 ) : (
                     <div key="character">
@@ -682,7 +748,7 @@ export default function CharacterSheet() {
                                         <CardContent>
                                             <div className="rounded-md border overflow-x-auto">
                                                 <table className="w-full text-sm min-w-[600px]">
-                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left align-middle font-medium text-muted-foreground border-r w-[200px]">Параметр / Атрибут</th>{statKeys.map(key => (<th key={key} className="h-10 px-4 text-center align-middle font-medium text-muted-foreground border-r last:border-r-0">{statLabels[key]}</th>))}</tr></thead>
+                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-14 px-4 text-left align-middle font-medium text-muted-foreground border-r w-[200px]">Параметр / Атрибут</th>{statKeys.map(key => (<th key={key} className="h-14 px-2 text-center align-middle font-medium text-muted-foreground border-r last:border-r-0 pb-2"><div className="flex flex-col items-center gap-1">{statIcons[key]}<span className="text-xs">{statLabels[key]}</span></div></th>))}</tr></thead>
                                                     <tbody className="[&_tr:last-child]:border-0">
                                                         <tr className="border-b">
                                                             <td className="p-2 align-middle border-r">
@@ -802,7 +868,7 @@ export default function CharacterSheet() {
                                                         </tr>
                                                         <tr className="bg-primary/5 dark:bg-primary/10 border-b"><td className="p-3 align-middle border-r font-bold text-primary">ХАРАКТЕРИСТИКИ</td>{statKeys.map(key => (<td key={key} className="p-3 align-middle border-r last:border-r-0"><Input disabled value={calculatedStats[key]?.finalStat || 0} className="h-9 w-full text-center border-transparent bg-transparent shadow-none disabled:opacity-100 font-bold text-xl p-0" /></td>))}</tr>
                                                         <tr className="border-b"><td className="p-2 align-middle border-r font-medium text-muted-foreground text-xs">Другие корректировки</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center border-transparent bg-transparent shadow-none no-spinner" /></td>))}</tr>
-                                                        <tr><td className="p-2 align-middle border-r font-semibold text-xs">Количество костей (Дайсы)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="ghost" size="sm" className="w-full h-8 font-mono" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d6`, statLabels[key])}>{calculatedStats[key]?.finalStat} (2D)</Button></td>))}</tr>
+                                                        <tr><td className="p-2 align-middle border-r font-semibold text-xs text-center md:text-left">Бросок кубиков (2d6 + Итог)</td>{statKeys.map(key => (<td key={key} className="p-2 align-middle border-r last:border-r-0"><Button type="button" variant="secondary" size="sm" className="w-full h-9 font-mono bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 shadow-sm" onClick={() => rollDice(`2d6 + ${calculatedStats[key]?.finalStat}`, statLabels[key])}><Dice5 className="w-4 h-4 mr-2" />2d6 + {calculatedStats[key]?.finalStat}</Button></td>))}</tr>
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -1215,21 +1281,27 @@ export default function CharacterSheet() {
                                                         <div className="grid grid-cols-1 gap-3">
                                                             {statKeys.map(key => {
                                                                 const final = calculatedStats[key]?.finalStat || 0;
+                                                                const colors = STAT_COLORS[key as keyof typeof STAT_COLORS] || "text-primary border-primary/20 bg-primary/10";
+                                                                const [textColor, borderColor, bgColor] = colors.split(" ");
+
                                                                 return (
-                                                                    <Card key={key} className="overflow-hidden">
+                                                                    <Card key={key} className={`overflow-hidden border-2 transition-colors ${borderColor.replace("/20", "/30")}`}>
                                                                         <div className="flex">
                                                                             {/* Left Side: Summary & Roll */}
-                                                                            <div className="flex flex-col items-center justify-center bg-muted/30 w-24 p-3 border-r">
-                                                                                <span className="text-2xl font-black text-primary">{final}</span>
-                                                                                <span className="text-[10px] text-muted-foreground uppercase font-bold text-center leading-tight mb-2">{statLabels[key]}</span>
+                                                                            <div className={`flex flex-col items-center justify-center w-36 p-2 border-r ${bgColor} ${borderColor}`}>
+                                                                                <span className={`text-2xl font-black ${textColor}`}>{final}</span>
+                                                                                <div className="flex items-center justify-center gap-2 mb-2 w-full px-1">
+                                                                                    <div className={textColor}>{statIcons[key]}</div>
+                                                                                    <span className={`text-[9px] uppercase font-bold text-center leading-tight break-words max-w-[90px] ${textColor}`}>{statLabels[key]}</span>
+                                                                                </div>
                                                                                 <Button
                                                                                     size="sm"
-                                                                                    variant="outline"
-                                                                                    className="h-8 w-full text-xs font-mono gap-1"
-                                                                                    onClick={() => rollDice(`${final}d6`, statLabels[key])}
+                                                                                    variant="secondary"
+                                                                                    className={`w-full h-auto py-1 px-2 bg-background/50 hover:bg-background/80 ${borderColor} ${textColor}`}
+                                                                                    onClick={() => rollDice(`2d6 + ${final}`, statLabels[key])}
                                                                                 >
-                                                                                    <Dice5 className="w-3 h-3" />
-                                                                                    {final}d
+                                                                                    <Dice5 className="w-3 h-3 shrink-0 mr-1" />
+                                                                                    <span className="text-xs whitespace-nowrap">2d6 + {final}</span>
                                                                                 </Button>
                                                                             </div>
 
@@ -1278,7 +1350,7 @@ export default function CharacterSheet() {
                                                         <CardContent>
                                                             <div className="overflow-x-auto rounded-md border">
                                                                 <table className="w-full text-sm min-w-[600px]">
-                                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-10 px-2 text-center text-muted-foreground">{statLabels[key]}</th>))}</tr></thead>
+                                                                    <thead><tr className="bg-muted/50 border-b"><th className="h-10 px-4 text-left font-medium text-muted-foreground border-r w-[180px]">Параметр</th>{statKeys.map(key => (<th key={key} className="h-12 px-2 text-center text-muted-foreground border-r last:border-r-0"><div className="flex flex-col items-center mb-1">{statIcons[key]}<span className="text-[10px] leading-none mt-1">{statLabels[key]}</span></div></th>))}</tr></thead>
                                                                     <tbody>
                                                                         <tr className="border-b">
                                                                             <td className="p-2 border-r">
@@ -1308,7 +1380,7 @@ export default function CharacterSheet() {
                                                                         <tr className="border-b"><td className="p-2 border-r font-medium text-xs text-muted-foreground">Коррект.</td>{statKeys.map(key => (<td key={key} className="p-2"><Input type="number" {...register(`stats.${key}.other`)} className="h-8 w-full text-center no-spinner border-transparent bg-transparent shadow-none" /></td>))}</tr>
                                                                         <tr>
                                                                             <td className="p-2 border-r">Дайсы</td>
-                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Button variant="ghost" className="w-full h-8 px-0" onClick={() => rollDice(`${calculatedStats[key]?.finalStat}d`, statLabels[key])}>{calculatedStats[key]?.finalStat}d</Button></td>))}
+                                                                            {statKeys.map(key => (<td key={key} className="p-2"><Button variant="secondary" className="w-full h-8 px-0 bg-primary/10 text-primary border-primary/20 hover:bg-primary/20" onClick={() => rollDice(`2d6 + ${calculatedStats[key]?.finalStat}`, statLabels[key])}><Dice5 className="w-3.5 h-3.5 mr-1" />2d6 + {calculatedStats[key]?.finalStat}</Button></td>))}
                                                                         </tr>
                                                                     </tbody>
                                                                 </table>
@@ -1364,7 +1436,7 @@ export default function CharacterSheet() {
                                         { id: "general", label: "Инфо", icon: User },
                                         { id: "combat", label: "Бой", icon: Sword },
                                         { id: "skills", label: "Навыки", icon: BookOpen },
-                                        { id: "stats", label: "Хар-ки", icon: FileText },
+                                        { id: "stats", label: "Хар", icon: FileText },
                                         { id: "inventory", label: "Вещи", icon: Backpack },
                                     ].map((tab) => (
                                         <button
@@ -1430,6 +1502,10 @@ export default function CharacterSheet() {
                     localStorage.setItem("pd_app_date", currentLog.date);
                     setIsChangelogOpen(false);
                 }}
+            />
+            <MemoriesTablesModal
+                open={isMemoriesModalOpen}
+                onOpenChange={setIsMemoriesModalOpen}
             />
         </div >
     );
